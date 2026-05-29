@@ -11,3 +11,8 @@ def client() -> Generator[TestClient]:
     app = create_app()
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    return {"Authorization": "Bearer dev-reviewer-token"}

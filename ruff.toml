@@ -1,0 +1,5 @@
+[format]
+
+
+[lint]
+select = ["E", "F", "I", "UP"]

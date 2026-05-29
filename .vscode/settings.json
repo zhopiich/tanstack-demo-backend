@@ -1,0 +1,10 @@
+{
+  "prettier.enable": false,
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "always",
+    },
+    "editor.defaultFormatter": "charliermarsh.ruff",
+  }
+}

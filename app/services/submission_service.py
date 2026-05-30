@@ -141,6 +141,10 @@ class SubmissionService:
             for submission in self._submissions
         }
 
+    @property
+    def submissions(self) -> list[Submission]:
+        return list(self._submissions)
+
     def list_submissions(
         self,
         *,

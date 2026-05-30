@@ -5,6 +5,9 @@ from fastapi import APIRouter, Depends, Query, Response
 from app.core.security import require_current_user
 from app.schemas.auth import AuthUser
 from app.schemas.submission import (
+    BatchDeleteBody,
+    BatchReviewBody,
+    DeletedCountResponse,
     SortOrder,
     SubmissionCreateBody,
     SubmissionListResponse,
@@ -14,6 +17,7 @@ from app.schemas.submission import (
     SubmissionType,
     SubmissionUpdateBody,
     SubmitterTier,
+    UpdatedCountResponse,
 )
 from app.services.submission_service import SubmissionService
 
@@ -65,6 +69,24 @@ def create_submission(
     service: Annotated[SubmissionService, Depends(get_submission_service)],
 ) -> SubmissionResponse:
     return SubmissionResponse(data=service.create_submission(body))
+
+
+@router.post("/batch-review", response_model=UpdatedCountResponse)
+def batch_review_submissions(
+    body: BatchReviewBody,
+    current_user: Annotated[AuthUser, Depends(require_current_user)],
+    service: Annotated[SubmissionService, Depends(get_submission_service)],
+) -> UpdatedCountResponse:
+    return service.batch_review(body, current_user)
+
+
+@router.post("/batch-delete", response_model=DeletedCountResponse)
+def batch_delete_submissions(
+    body: BatchDeleteBody,
+    _: Annotated[AuthUser, Depends(require_current_user)],
+    service: Annotated[SubmissionService, Depends(get_submission_service)],
+) -> DeletedCountResponse:
+    return service.batch_delete(body)
 
 
 @router.get("/{submission_id}", response_model=SubmissionResponse)

@@ -3,11 +3,17 @@ from math import ceil
 from typing import Literal
 
 from app.core.errors import ApiError
+from app.schemas.auth import AuthUser
 from app.schemas.common import Pagination
 from app.schemas.submission import (
     ArticleContent,
+    BatchDeleteBody,
+    BatchReviewBody,
+    DeletedCountResponse,
     ImageContent,
     LinkContent,
+    Review,
+    Reviewer,
     SortOrder,
     Submission,
     SubmissionCreateBody,
@@ -18,6 +24,7 @@ from app.schemas.submission import (
     SubmissionUpdateBody,
     Submitter,
     SubmitterTier,
+    UpdatedCountResponse,
     VideoContent,
 )
 
@@ -235,6 +242,34 @@ class SubmissionService:
         submission = self.get_submission(submission_id)
         self._submissions.remove(submission)
 
+    def batch_review(
+        self,
+        body: BatchReviewBody,
+        reviewer: AuthUser,
+    ) -> UpdatedCountResponse:
+        submissions = self._submissions_by_ids(body.ids)
+        now = datetime.now(UTC)
+
+        for submission in submissions:
+            submission.status = body.verdict
+            submission.review = Review(
+                reviewer=Reviewer(name=reviewer.name, email=reviewer.email),
+                verdict=body.verdict,
+                reason=body.reason,
+                reviewedAt=now,
+            )
+            submission.updated_at = now
+
+        return UpdatedCountResponse(updatedCount=len(submissions))
+
+    def batch_delete(self, body: BatchDeleteBody) -> DeletedCountResponse:
+        submissions = self._submissions_by_ids(body.ids)
+
+        for submission in submissions:
+            self._submissions.remove(submission)
+
+        return DeletedCountResponse(deletedCount=len(submissions))
+
     def _generate_id(self) -> str:
         value = self._next_id
         self._next_id += 1
@@ -246,6 +281,20 @@ class SubmissionService:
             raise ApiError(404, "submitter_not_found", "Submitter not found")
 
         return submitter
+
+    def _submissions_by_ids(self, ids: list[str]) -> list[Submission]:
+        unique_ids = list(dict.fromkeys(ids))
+        submissions_by_id = {
+            submission.id: submission
+            for submission in self._submissions
+            if submission.id in unique_ids
+        }
+
+        for submission_id in unique_ids:
+            if submission_id not in submissions_by_id:
+                raise ApiError(404, "submission_not_found", "Submission not found")
+
+        return [submissions_by_id[submission_id] for submission_id in unique_ids]
 
     def _matches_filters(
         self,

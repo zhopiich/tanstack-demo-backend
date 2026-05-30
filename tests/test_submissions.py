@@ -234,3 +234,77 @@ def test_delete_submission_removes_it(
     assert deleted.status_code == 204
     assert deleted.content == b""
     assert fetched.status_code == 404
+
+
+def test_batch_review_updates_all_requested_submissions(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    listing = client.get("/api/submissions", headers=auth_headers).json()
+    ids = [item["id"] for item in listing["data"][:2]]
+
+    response = client.post(
+        "/api/submissions/batch-review",
+        json={
+            "ids": ids,
+            "verdict": "rejected",
+            "reason": "Does not satisfy the moderation policy",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"updatedCount": 2}
+
+    for submission_id in ids:
+        fetched = client.get(f"/api/submissions/{submission_id}", headers=auth_headers)
+        data = fetched.json()["data"]
+        assert data["status"] == "rejected"
+        assert data["review"]["verdict"] == "rejected"
+        assert data["review"]["reviewer"]["email"] == "reviewer@example.com"
+
+
+def test_batch_review_is_all_or_nothing_when_an_id_is_missing(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    listing = client.get("/api/submissions", headers=auth_headers).json()
+    existing_id = listing["data"][0]["id"]
+
+    response = client.post(
+        "/api/submissions/batch-review",
+        json={
+            "ids": [existing_id, "c999999999999999999999999"],
+            "verdict": "approved",
+            "reason": "This content is ready for publishing",
+        },
+        headers=auth_headers,
+    )
+
+    fetched = client.get(f"/api/submissions/{existing_id}", headers=auth_headers)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "submission_not_found"
+    assert fetched.json()["data"]["status"] == listing["data"][0]["status"]
+    assert fetched.json()["data"]["review"] == listing["data"][0]["review"]
+
+
+def test_batch_delete_removes_all_requested_submissions(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    listing = client.get("/api/submissions", headers=auth_headers).json()
+    ids = [item["id"] for item in listing["data"][:2]]
+
+    response = client.post(
+        "/api/submissions/batch-delete",
+        json={"ids": ids},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"deletedCount": 2}
+
+    for submission_id in ids:
+        fetched = client.get(f"/api/submissions/{submission_id}", headers=auth_headers)
+        assert fetched.status_code == 404

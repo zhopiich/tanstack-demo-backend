@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Response
 
 from app.core.security import require_current_user
+from app.dependencies import get_submission_service
 from app.schemas.auth import AuthUser
 from app.schemas.submission import (
     BatchDeleteBody,
@@ -26,17 +27,6 @@ router = APIRouter(
     tags=["submissions"],
     dependencies=[Depends(require_current_user)],
 )
-
-submission_service = SubmissionService()
-
-
-def get_submission_service() -> SubmissionService:
-    return submission_service
-
-
-def reset_submission_service() -> None:
-    global submission_service
-    submission_service = SubmissionService()
 
 
 @router.get("", response_model=SubmissionListResponse)

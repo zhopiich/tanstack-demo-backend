@@ -6,12 +6,9 @@ from app.core.errors import ApiError
 from app.schemas.auth import AuthUser
 from app.schemas.common import Pagination
 from app.schemas.submission import (
-    ArticleContent,
     BatchDeleteBody,
     BatchReviewBody,
     DeletedCountResponse,
-    ImageContent,
-    LinkContent,
     Review,
     Reviewer,
     SortOrder,
@@ -25,125 +22,13 @@ from app.schemas.submission import (
     Submitter,
     SubmitterTier,
     UpdatedCountResponse,
-    VideoContent,
 )
-
-
-def seed_submissions() -> list[Submission]:
-    now = datetime(2026, 5, 29, 8, 0, tzinfo=UTC)
-    submitters = [
-        Submitter(
-            id="c100000000000000000000001",
-            name="Alex Chen",
-            email="alex@example.com",
-            tier="pro",
-        ),
-        Submitter(
-            id="c100000000000000000000002",
-            name="Mina Lin",
-            email="mina@example.com",
-            tier="verified",
-        ),
-        Submitter(
-            id="c100000000000000000000003",
-            name="Jordan Wu",
-            email="jordan@example.com",
-            tier="free",
-        ),
-    ]
-
-    return [
-        Submission(
-            id="c200000000000000000000001",
-            title="Article moderation guide",
-            status="pending",
-            submitter=submitters[0],
-            content=ArticleContent(
-                type="article",
-                url="https://example.com/articles/moderation-guide",
-                thumbnailUrl=None,
-                wordCount=1800,
-                readingTime=9,
-            ),
-            tags=["editorial", "design"],
-            review=None,
-            score=82,
-            flagCount=0,
-            createdAt=now,
-            updatedAt=now,
-        ),
-        Submission(
-            id="c200000000000000000000002",
-            title="Launch image gallery",
-            status="approved",
-            submitter=submitters[1],
-            content=ImageContent(
-                type="image",
-                url="https://example.com/images/launch-gallery",
-                thumbnailUrl="https://example.com/images/launch-thumb",
-                width=1600,
-                height=900,
-            ),
-            tags=["launch", "visual"],
-            review=None,
-            score=91,
-            flagCount=1,
-            createdAt=now,
-            updatedAt=now,
-        ),
-        Submission(
-            id="c200000000000000000000003",
-            title="Product walkthrough video",
-            status="flagged",
-            submitter=submitters[0],
-            content=VideoContent(
-                type="video",
-                url="https://example.com/videos/product-walkthrough",
-                thumbnailUrl="https://example.com/videos/product-thumb",
-                duration=420,
-                resolution="1080p",
-            ),
-            tags=["product", "video"],
-            review=None,
-            score=64,
-            flagCount=3,
-            createdAt=now,
-            updatedAt=now,
-        ),
-        Submission(
-            id="c200000000000000000000004",
-            title="External research link",
-            status="pending",
-            submitter=submitters[2],
-            content=LinkContent(
-                type="link",
-                url="https://example.com/research/content-trends",
-                thumbnailUrl=None,
-                domain="example.com",
-                isBehindPaywall=False,
-            ),
-            tags=["research"],
-            review=None,
-            score=73,
-            flagCount=0,
-            createdAt=now,
-            updatedAt=now,
-        ),
-    ]
+from app.stores.submission_store import InMemorySubmissionStore
 
 
 class SubmissionService:
-    def __init__(self) -> None:
-        self._submissions = seed_submissions()
-        self._next_id = 5
-        self._submitters = {
-            str(submission.submitter.email): submission.submitter
-            for submission in self._submissions
-        }
-
-    @property
-    def submissions(self) -> list[Submission]:
-        return list(self._submissions)
+    def __init__(self, store: InMemorySubmissionStore) -> None:
+        self._store = store
 
     def list_submissions(
         self,
@@ -160,7 +45,7 @@ class SubmissionService:
         query = search.strip().lower() if search else None
         submissions = [
             submission
-            for submission in self._submissions
+            for submission in self._store.list_submissions()
             if self._matches_filters(
                 submission,
                 status=status,
@@ -190,16 +75,16 @@ class SubmissionService:
         )
 
     def get_submission(self, submission_id: str) -> Submission:
-        for submission in self._submissions:
-            if submission.id == submission_id:
-                return submission
+        submission = self._store.get_submission(submission_id)
+        if submission is not None:
+            return submission
 
         raise ApiError(404, "submission_not_found", "Submission not found")
 
     def create_submission(self, body: SubmissionCreateBody) -> Submission:
         now = datetime.now(UTC)
         submission = Submission(
-            id=self._generate_id(),
+            id=self._store.generate_submission_id(),
             title=body.title,
             status="pending",
             submitter=self._submitter_for_email(str(body.submitter_email)),
@@ -211,7 +96,7 @@ class SubmissionService:
             createdAt=now,
             updatedAt=now,
         )
-        self._submissions.append(submission)
+        self._store.add_submission(submission)
         return submission
 
     def update_submission(
@@ -244,7 +129,7 @@ class SubmissionService:
 
     def delete_submission(self, submission_id: str) -> None:
         submission = self.get_submission(submission_id)
-        self._submissions.remove(submission)
+        self._store.remove_submission(submission)
 
     def batch_review(
         self,
@@ -270,17 +155,12 @@ class SubmissionService:
         submissions = self._submissions_by_ids(body.ids)
 
         for submission in submissions:
-            self._submissions.remove(submission)
+            self._store.remove_submission(submission)
 
         return DeletedCountResponse(deletedCount=len(submissions))
 
-    def _generate_id(self) -> str:
-        value = self._next_id
-        self._next_id += 1
-        return f"c{value:024x}"
-
     def _submitter_for_email(self, email: str) -> Submitter:
-        submitter = self._submitters.get(email)
+        submitter = self._store.get_submitter_by_email(email)
         if submitter is None:
             raise ApiError(404, "submitter_not_found", "Submitter not found")
 
@@ -288,11 +168,7 @@ class SubmissionService:
 
     def _submissions_by_ids(self, ids: list[str]) -> list[Submission]:
         unique_ids = list(dict.fromkeys(ids))
-        submissions_by_id = {
-            submission.id: submission
-            for submission in self._submissions
-            if submission.id in unique_ids
-        }
+        submissions_by_id = self._store.get_submissions_by_ids(unique_ids)
 
         for submission_id in unique_ids:
             if submission_id not in submissions_by_id:

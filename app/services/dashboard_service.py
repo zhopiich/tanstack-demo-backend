@@ -9,17 +9,17 @@ from app.schemas.dashboard import (
     TopSubmitter,
 )
 from app.schemas.submission import Submission, SubmissionType
-from app.services.submission_service import SubmissionService
+from app.stores.submission_store import InMemorySubmissionStore
 
 SUBMISSION_TYPES: tuple[SubmissionType, ...] = ("article", "image", "video", "link")
 
 
 class DashboardService:
-    def __init__(self, submission_service: SubmissionService) -> None:
-        self._submission_service = submission_service
+    def __init__(self, store: InMemorySubmissionStore) -> None:
+        self._store = store
 
     def stats(self) -> DashboardStats:
-        submissions = self._submission_service.submissions
+        submissions = self._store.list_submissions()
         status_counts = Counter(submission.status for submission in submissions)
 
         return DashboardStats(

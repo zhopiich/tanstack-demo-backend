@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Path, Query, Response
 
 from app.core.security import require_current_user
 from app.dependencies import get_submission_service
@@ -11,6 +11,7 @@ from app.schemas.submission import (
     DeletedCountResponse,
     SortOrder,
     SubmissionCreateBody,
+    SubmissionId,
     SubmissionListResponse,
     SubmissionResponse,
     SubmissionStatus,
@@ -84,40 +85,40 @@ def batch_delete_submissions(
     return service.batch_delete(body)
 
 
-@router.get("/{submission_id}", response_model=SubmissionResponse)
+@router.get("/{id}", response_model=SubmissionResponse)
 def get_submission(
-    submission_id: str,
+    id: Annotated[SubmissionId, Path()],
     _: Annotated[AuthUser, Depends(require_current_user)],
     service: Annotated[SubmissionService, Depends(get_submission_service)],
 ) -> SubmissionResponse:
-    return SubmissionResponse(data=service.get_submission(submission_id))
+    return SubmissionResponse(data=service.get_submission(id))
 
 
-@router.patch("/{submission_id}", response_model=SubmissionResponse)
+@router.patch("/{id}", response_model=SubmissionResponse)
 def update_submission(
-    submission_id: str,
+    id: Annotated[SubmissionId, Path()],
     body: SubmissionUpdateBody,
     _: Annotated[AuthUser, Depends(require_current_user)],
     service: Annotated[SubmissionService, Depends(get_submission_service)],
 ) -> SubmissionResponse:
-    return SubmissionResponse(data=service.update_submission(submission_id, body))
+    return SubmissionResponse(data=service.update_submission(id, body))
 
 
-@router.delete("/{submission_id}", status_code=204)
+@router.delete("/{id}", status_code=204)
 def delete_submission(
-    submission_id: str,
+    id: Annotated[SubmissionId, Path()],
     _: Annotated[AuthUser, Depends(require_current_user)],
     service: Annotated[SubmissionService, Depends(get_submission_service)],
 ) -> Response:
-    service.delete_submission(submission_id)
+    service.delete_submission(id)
     return Response(status_code=204)
 
 
-@router.patch("/{submission_id}/status", response_model=SubmissionResponse)
+@router.patch("/{id}/status", response_model=SubmissionResponse)
 def update_submission_status(
-    submission_id: str,
+    id: Annotated[SubmissionId, Path()],
     body: SubmissionStatusUpdateBody,
     _: Annotated[AuthUser, Depends(require_current_user)],
     service: Annotated[SubmissionService, Depends(get_submission_service)],
 ) -> SubmissionResponse:
-    return SubmissionResponse(data=service.update_status(submission_id, body))
+    return SubmissionResponse(data=service.update_status(id, body))

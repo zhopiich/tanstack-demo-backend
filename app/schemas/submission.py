@@ -16,6 +16,7 @@ SubmitterTier = Literal["free", "pro", "verified"]
 VideoResolution = Literal["480p", "720p", "1080p", "4k"]
 ReviewVerdict = Literal["approved", "rejected"]
 SortOrder = Literal["asc", "desc"]
+SubmissionId = Annotated[str, Field(pattern=r"^c[a-z0-9]{24}$")]
 
 
 class Submitter(ApiModel):
@@ -113,13 +114,13 @@ class SubmissionStatusUpdateBody(ApiModel):
 
 
 class BatchReviewBody(ApiModel):
-    ids: list[str] = Field(min_length=1)
+    ids: list[SubmissionId] = Field(min_length=1)
     verdict: ReviewVerdict
     reason: str = Field(min_length=10)
 
 
 class BatchDeleteBody(ApiModel):
-    ids: list[str] = Field(min_length=1)
+    ids: list[SubmissionId] = Field(min_length=1)
 
 
 class UpdatedCountResponse(ApiModel):

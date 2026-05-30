@@ -20,6 +20,78 @@ def test_list_submissions_returns_paginated_data(
     assert body["data"][0]["content"]["type"] in {"article", "image", "video", "link"}
 
 
+def test_list_submissions_filters_by_status_type_and_tier(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    response = client.get(
+        "/api/submissions",
+        params={"status": "pending", "type": "article", "tier": "pro"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["data"]) == 1
+    assert body["data"][0]["status"] == "pending"
+    assert body["data"][0]["content"]["type"] == "article"
+    assert body["data"][0]["submitter"]["tier"] == "pro"
+    assert body["pagination"]["total"] == 1
+
+
+def test_list_submissions_searches_title_tags_and_submitter(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    title_match = client.get(
+        "/api/submissions",
+        params={"search": "walkthrough"},
+        headers=auth_headers,
+    )
+    tag_match = client.get(
+        "/api/submissions",
+        params={"search": "research"},
+        headers=auth_headers,
+    )
+    submitter_match = client.get(
+        "/api/submissions",
+        params={"search": "alex@example.com"},
+        headers=auth_headers,
+    )
+
+    assert title_match.status_code == 200
+    assert [item["title"] for item in title_match.json()["data"]] == [
+        "Product walkthrough video"
+    ]
+    assert tag_match.status_code == 200
+    assert [item["title"] for item in tag_match.json()["data"]] == [
+        "External research link"
+    ]
+    assert submitter_match.status_code == 200
+    assert submitter_match.json()["pagination"]["total"] == 2
+
+
+def test_list_submissions_sorts_and_paginates(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    response = client.get(
+        "/api/submissions",
+        params={"sortBy": "score", "sortOrder": "desc", "page": 2, "pageSize": 2},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["score"] for item in body["data"]] == [73, 64]
+    assert body["pagination"] == {
+        "page": 2,
+        "pageSize": 2,
+        "total": 4,
+        "totalPages": 2,
+    }
+
+
 def test_get_submission_by_id(client: TestClient, auth_headers: dict[str, str]) -> None:
     listing = client.get("/api/submissions", headers=auth_headers).json()
     submission_id = listing["data"][0]["id"]

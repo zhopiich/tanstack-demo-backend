@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+from math import ceil
+from typing import Literal
 
 from app.core.errors import ApiError
 from app.schemas.common import Pagination
@@ -6,12 +8,16 @@ from app.schemas.submission import (
     ArticleContent,
     ImageContent,
     LinkContent,
+    SortOrder,
     Submission,
     SubmissionCreateBody,
     SubmissionListResponse,
+    SubmissionStatus,
     SubmissionStatusUpdateBody,
+    SubmissionType,
     SubmissionUpdateBody,
     Submitter,
+    SubmitterTier,
     VideoContent,
 )
 
@@ -128,15 +134,47 @@ class SubmissionService:
             for submission in self._submissions
         }
 
-    def list_submissions(self) -> SubmissionListResponse:
-        total = len(self._submissions)
+    def list_submissions(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        status: SubmissionStatus | None = None,
+        type_: SubmissionType | None = None,
+        tier: SubmitterTier | None = None,
+        search: str | None = None,
+        sort_by: Literal["createdAt", "score", "flagCount"] = "createdAt",
+        sort_order: SortOrder = "desc",
+    ) -> SubmissionListResponse:
+        query = search.strip().lower() if search else None
+        submissions = [
+            submission
+            for submission in self._submissions
+            if self._matches_filters(
+                submission,
+                status=status,
+                type_=type_,
+                tier=tier,
+                query=query,
+            )
+        ]
+
+        submissions.sort(
+            key=lambda submission: self._sort_value(submission, sort_by),
+            reverse=sort_order == "desc",
+        )
+
+        total = len(submissions)
+        start = (page - 1) * page_size
+        end = start + page_size
+
         return SubmissionListResponse(
-            data=self._submissions,
+            data=submissions[start:end],
             pagination=Pagination(
-                page=1,
-                pageSize=20,
+                page=page,
+                pageSize=page_size,
                 total=total,
-                totalPages=1 if total else 0,
+                totalPages=ceil(total / page_size) if total else 0,
             ),
         )
 
@@ -208,3 +246,40 @@ class SubmissionService:
             raise ApiError(404, "submitter_not_found", "Submitter not found")
 
         return submitter
+
+    def _matches_filters(
+        self,
+        submission: Submission,
+        *,
+        status: SubmissionStatus | None,
+        type_: SubmissionType | None,
+        tier: SubmitterTier | None,
+        query: str | None,
+    ) -> bool:
+        return (
+            (status is None or submission.status == status)
+            and (type_ is None or submission.content.type == type_)
+            and (tier is None or submission.submitter.tier == tier)
+            and (not query or self._matches_search(submission, query))
+        )
+
+    def _matches_search(self, submission: Submission, query: str) -> bool:
+        searchable_values = [
+            submission.title,
+            *submission.tags,
+            submission.submitter.name,
+            str(submission.submitter.email),
+        ]
+        return any(query in value.lower() for value in searchable_values)
+
+    def _sort_value(
+        self,
+        submission: Submission,
+        sort_by: Literal["createdAt", "score", "flagCount"],
+    ) -> datetime | int:
+        if sort_by == "createdAt":
+            return submission.created_at
+        if sort_by == "score":
+            return submission.score
+
+        return submission.flag_count

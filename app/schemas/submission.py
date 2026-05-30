@@ -99,7 +99,7 @@ class SubmissionCreateBody(ApiModel):
     title: str = Field(min_length=1, max_length=100)
     tags: list[str] = Field(max_length=5)
     content: Content
-    submitter_email: EmailStr | None = Field(default=None, alias="submitterEmail")
+    submitter_email: EmailStr = Field(alias="submitterEmail")
 
 
 class SubmissionUpdateBody(ApiModel):

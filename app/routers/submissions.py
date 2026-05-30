@@ -34,6 +34,11 @@ def get_submission_service() -> SubmissionService:
     return submission_service
 
 
+def reset_submission_service() -> None:
+    global submission_service
+    submission_service = SubmissionService()
+
+
 @router.get("", response_model=SubmissionListResponse)
 def list_submissions(
     _: Annotated[AuthUser, Depends(require_current_user)],

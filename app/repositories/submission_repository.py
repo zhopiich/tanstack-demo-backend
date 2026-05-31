@@ -1,7 +1,18 @@
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from app.domain import submission as domain
+
+SortBy = Literal["createdAt", "score", "flagCount"]
+SortOrder = Literal["asc", "desc"]
+
+
+@dataclass(frozen=True)
+class SubmissionListResult:
+    data: list[domain.Submission]
+    total: int
 
 
 class SubmissionRepository:
@@ -33,6 +44,39 @@ class SubmissionRepository:
         ).fetchall()
 
         return [self._to_submission(row) for row in rows]
+
+    def find_submissions(
+        self,
+        *,
+        status: domain.SubmissionStatus | None = None,
+        type_: domain.SubmissionType | None = None,
+        tier: domain.SubmitterTier | None = None,
+        search: str | None = None,
+        sort_by: SortBy = "createdAt",
+        sort_order: SortOrder = "desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> SubmissionListResult:
+        where_sql, params = self._submission_filters(
+            status=status,
+            type_=type_,
+            tier=tier,
+            search=search,
+        )
+        total = self._count_submissions(where_sql, params)
+        rows = self._find_submission_rows(
+            where_sql=where_sql,
+            params=params,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit,
+            offset=offset,
+        )
+
+        return SubmissionListResult(
+            data=[self._to_submission(row) for row in rows],
+            total=total,
+        )
 
     def get_submission(self, submission_id: str) -> domain.Submission | None:
         row = self._connection.execute(
@@ -126,6 +170,118 @@ class SubmissionRepository:
             )
 
         return cursor.rowcount > 0
+
+    def _submission_filters(
+        self,
+        *,
+        status: domain.SubmissionStatus | None,
+        type_: domain.SubmissionType | None,
+        tier: domain.SubmitterTier | None,
+        search: str | None,
+    ) -> tuple[str, dict[str, object]]:
+        clauses: list[str] = []
+        params: dict[str, object] = {}
+
+        if status is not None:
+            clauses.append("submissions.status = :status")
+            params["status"] = status.value
+
+        if type_ is not None:
+            clauses.append("submissions.content_type = :content_type")
+            params["content_type"] = type_.value
+
+        if tier is not None:
+            clauses.append("submitters.tier = :tier")
+            params["tier"] = tier.value
+
+        query = search.strip().lower() if search else ""
+        if query:
+            clauses.append(
+                """
+                (
+                    lower(submissions.title) LIKE :search
+                    OR lower(submitters.name) LIKE :search
+                    OR lower(submitters.email) LIKE :search
+                    OR EXISTS (
+                        SELECT 1
+                        FROM submission_tags
+                        WHERE submission_tags.submission_id = submissions.id
+                        AND lower(submission_tags.tag) LIKE :search
+                    )
+                )
+                """
+            )
+            params["search"] = f"%{query}%"
+
+        if not clauses:
+            return "", params
+
+        return "WHERE " + " AND ".join(clauses), params
+
+    def _count_submissions(
+        self,
+        where_sql: str,
+        params: dict[str, object],
+    ) -> int:
+        row = self._connection.execute(
+            f"""
+            SELECT COUNT(*) AS total
+            FROM submissions
+            JOIN submitters ON submitters.id = submissions.submitter_id
+            {where_sql}
+            """,
+            params,
+        ).fetchone()
+
+        return row["total"]
+
+    def _find_submission_rows(
+        self,
+        *,
+        where_sql: str,
+        params: dict[str, object],
+        sort_by: SortBy,
+        sort_order: SortOrder,
+        limit: int,
+        offset: int,
+    ) -> list[sqlite3.Row]:
+        query_params = params | {"limit": limit, "offset": offset}
+        order_direction = "ASC" if sort_order == "asc" else "DESC"
+        order_column = self._sort_column(sort_by)
+
+        return self._connection.execute(
+            f"""
+            SELECT
+                submissions.id,
+                submissions.title,
+                submissions.status,
+                submissions.content_type,
+                submissions.content_url,
+                submissions.thumbnail_url,
+                submissions.score,
+                submissions.flag_count,
+                submissions.created_at,
+                submissions.updated_at,
+                submitters.id AS submitter_id,
+                submitters.name AS submitter_name,
+                submitters.email AS submitter_email,
+                submitters.tier AS submitter_tier
+            FROM submissions
+            JOIN submitters ON submitters.id = submissions.submitter_id
+            {where_sql}
+            ORDER BY {order_column} {order_direction}, submissions.id ASC
+            LIMIT :limit
+            OFFSET :offset
+            """,
+            query_params,
+        ).fetchall()
+
+    def _sort_column(self, sort_by: SortBy) -> str:
+        return {
+            "createdAt": "submissions.created_at",
+            "score": "submissions.score",
+            "flagCount": "submissions.flag_count",
+        }[sort_by]
 
     def _insert_submission(self, submission: domain.Submission) -> None:
         self._connection.execute(

@@ -11,6 +11,7 @@ from app.domain.submission import (
     ReviewVerdict,
     Submission,
     SubmissionStatus,
+    SubmissionType,
     Submitter,
     SubmitterTier,
     VideoContent,
@@ -114,6 +115,84 @@ def test_list_submissions_maps_all_content_variants() -> None:
     assert isinstance(link.content, LinkContent)
     assert link.content.domain == "example.com"
     assert link.content.is_behind_paywall is False
+
+
+def test_find_submissions_filters_by_status_type_tier_and_tag_search() -> None:
+    repository = SubmissionRepository(initialize_database())
+
+    result = repository.find_submissions(
+        status=SubmissionStatus.PENDING,
+        type_=SubmissionType.ARTICLE,
+        tier=SubmitterTier.PRO,
+        search="DESIGN",
+        sort_by="createdAt",
+        sort_order="desc",
+        limit=20,
+        offset=0,
+    )
+
+    assert result.total == 1
+    assert [submission.id for submission in result.data] == [
+        "c200000000000000000000001",
+    ]
+
+
+def test_find_submissions_searches_title_submitter_name_and_email() -> None:
+    repository = SubmissionRepository(initialize_database())
+
+    title_result = repository.find_submissions(search="research")
+    name_result = repository.find_submissions(search="mina")
+    email_result = repository.find_submissions(search="ALEX@EXAMPLE.COM")
+
+    assert [submission.id for submission in title_result.data] == [
+        "c200000000000000000000004",
+    ]
+    assert title_result.total == 1
+    assert [submission.id for submission in name_result.data] == [
+        "c200000000000000000000002",
+    ]
+    assert name_result.total == 1
+    assert [submission.id for submission in email_result.data] == [
+        "c200000000000000000000001",
+        "c200000000000000000000003",
+    ]
+    assert email_result.total == 2
+
+
+def test_find_submissions_sorts_and_paginates_with_filtered_total() -> None:
+    repository = SubmissionRepository(initialize_database())
+
+    result = repository.find_submissions(
+        sort_by="score",
+        sort_order="desc",
+        limit=2,
+        offset=1,
+    )
+
+    assert result.total == 4
+    assert [submission.id for submission in result.data] == [
+        "c200000000000000000000001",
+        "c200000000000000000000004",
+    ]
+
+
+def test_find_submissions_sorts_by_flag_count_ascending() -> None:
+    repository = SubmissionRepository(initialize_database())
+
+    result = repository.find_submissions(
+        sort_by="flagCount",
+        sort_order="asc",
+        limit=4,
+        offset=0,
+    )
+
+    assert result.total == 4
+    assert [submission.id for submission in result.data] == [
+        "c200000000000000000000001",
+        "c200000000000000000000004",
+        "c200000000000000000000002",
+        "c200000000000000000000003",
+    ]
 
 
 def test_add_submission_persists_complete_domain_model() -> None:

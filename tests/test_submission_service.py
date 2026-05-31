@@ -1,13 +1,29 @@
+from collections.abc import Iterator
+
+import pytest
+
 from app.core.errors import ApiError
-from app.db.session import initialize_database
+from app.db.session import connect_database, reset_database
 from app.repositories.submission_repository import SubmissionRepository
 from app.schemas.auth import AuthUser
 from app.schemas.submission import BatchReviewBody, SubmissionCreateBody
 from app.services.submission_service import SubmissionService
 
 
-def test_submission_service_creates_and_lists_with_sqlite_repository() -> None:
-    service = SubmissionService(SubmissionRepository(initialize_database()))
+@pytest.fixture
+def service(tmp_path) -> Iterator[SubmissionService]:
+    database_path = tmp_path / "content.db"
+    reset_database(database_path)
+    connection = connect_database(database_path)
+    try:
+        yield SubmissionService(SubmissionRepository(connection))
+    finally:
+        connection.close()
+
+
+def test_submission_service_creates_and_lists_with_sqlite_repository(
+    service: SubmissionService,
+) -> None:
     body = SubmissionCreateBody(
         title="SQLite service article",
         tags=["sqlite"],
@@ -34,8 +50,9 @@ def test_submission_service_creates_and_lists_with_sqlite_repository() -> None:
     assert listing.data[0].id == created.id
 
 
-def test_batch_review_is_all_or_nothing_with_sqlite_repository() -> None:
-    service = SubmissionService(SubmissionRepository(initialize_database()))
+def test_batch_review_is_all_or_nothing_with_sqlite_repository(
+    service: SubmissionService,
+) -> None:
     listing = service.list_submissions()
     existing = listing.data[0]
 

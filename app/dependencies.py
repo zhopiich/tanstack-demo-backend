@@ -1,35 +1,50 @@
 import sqlite3
+from collections.abc import Generator
+from typing import Annotated
 
-from app.db.session import initialize_database
+from fastapi import Depends
+
+from app.core.config import Settings, get_settings
+from app.db.session import connect_database
 from app.repositories.dashboard_repository import DashboardRepository
 from app.repositories.submission_repository import SubmissionRepository
 from app.services.dashboard_service import DashboardService
 from app.services.submission_service import SubmissionService
 
-database_connection = initialize_database()
+
+def get_database_connection(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> Generator[sqlite3.Connection]:
+    connection = connect_database(settings.database_path)
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
-def get_database_connection() -> sqlite3.Connection:
-    return database_connection
+def get_submission_repository(
+    connection: Annotated[sqlite3.Connection, Depends(get_database_connection)],
+) -> SubmissionRepository:
+    return SubmissionRepository(connection)
 
 
-def reset_database() -> None:
-    global database_connection
-    database_connection.close()
-    database_connection = initialize_database()
+def get_dashboard_repository(
+    connection: Annotated[sqlite3.Connection, Depends(get_database_connection)],
+) -> DashboardRepository:
+    return DashboardRepository(connection)
 
 
-def get_submission_repository() -> SubmissionRepository:
-    return SubmissionRepository(get_database_connection())
+def get_submission_service(
+    repository: Annotated[SubmissionRepository, Depends(get_submission_repository)],
+) -> SubmissionService:
+    return SubmissionService(repository)
 
 
-def get_dashboard_repository() -> DashboardRepository:
-    return DashboardRepository(get_database_connection())
-
-
-def get_submission_service() -> SubmissionService:
-    return SubmissionService(get_submission_repository())
-
-
-def get_dashboard_service() -> DashboardService:
-    return DashboardService(get_dashboard_repository())
+def get_dashboard_service(
+    repository: Annotated[DashboardRepository, Depends(get_dashboard_repository)],
+) -> DashboardService:
+    return DashboardService(repository)

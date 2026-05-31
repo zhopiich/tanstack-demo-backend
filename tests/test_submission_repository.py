@@ -1,7 +1,10 @@
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from app.db.session import initialize_database
+import pytest
+
+from app.db.session import connect_database, reset_database
 from app.domain.submission import (
     ArticleContent,
     ImageContent,
@@ -20,9 +23,20 @@ from app.domain.submission import (
 from app.repositories.submission_repository import SubmissionRepository
 
 
-def test_list_submissions_returns_seeded_domain_models() -> None:
-    repository = SubmissionRepository(initialize_database())
+@pytest.fixture
+def repository(tmp_path) -> Iterator[SubmissionRepository]:
+    database_path = tmp_path / "content.db"
+    reset_database(database_path)
+    connection = connect_database(database_path)
+    try:
+        yield SubmissionRepository(connection)
+    finally:
+        connection.close()
 
+
+def test_list_submissions_returns_seeded_domain_models(
+    repository: SubmissionRepository,
+) -> None:
     submissions = repository.list_submissions()
 
     assert [submission.id for submission in submissions] == [
@@ -52,9 +66,9 @@ def test_list_submissions_returns_seeded_domain_models() -> None:
     assert first.updated_at.isoformat() == "2026-05-29T08:00:00+00:00"
 
 
-def test_get_submission_returns_one_domain_model() -> None:
-    repository = SubmissionRepository(initialize_database())
-
+def test_get_submission_returns_one_domain_model(
+    repository: SubmissionRepository,
+) -> None:
     submission = repository.get_submission("c200000000000000000000003")
 
     assert submission is not None
@@ -67,17 +81,17 @@ def test_get_submission_returns_one_domain_model() -> None:
     assert submission.tags == ["product", "video"]
 
 
-def test_get_submission_returns_none_for_missing_id() -> None:
-    repository = SubmissionRepository(initialize_database())
-
+def test_get_submission_returns_none_for_missing_id(
+    repository: SubmissionRepository,
+) -> None:
     submission = repository.get_submission("c999999999999999999999999")
 
     assert submission is None
 
 
-def test_get_submitter_by_email_returns_domain_submitter() -> None:
-    repository = SubmissionRepository(initialize_database())
-
+def test_get_submitter_by_email_returns_domain_submitter(
+    repository: SubmissionRepository,
+) -> None:
     submitter = repository.get_submitter_by_email("mina@example.com")
 
     assert submitter is not None
@@ -87,17 +101,17 @@ def test_get_submitter_by_email_returns_domain_submitter() -> None:
     assert submitter.tier is SubmitterTier.VERIFIED
 
 
-def test_get_submitter_by_email_returns_none_for_missing_email() -> None:
-    repository = SubmissionRepository(initialize_database())
-
+def test_get_submitter_by_email_returns_none_for_missing_email(
+    repository: SubmissionRepository,
+) -> None:
     submitter = repository.get_submitter_by_email("missing@example.com")
 
     assert submitter is None
 
 
-def test_list_submissions_maps_all_content_variants() -> None:
-    repository = SubmissionRepository(initialize_database())
-
+def test_list_submissions_maps_all_content_variants(
+    repository: SubmissionRepository,
+) -> None:
     submissions = repository.list_submissions()
 
     image = submissions[1]
@@ -117,9 +131,9 @@ def test_list_submissions_maps_all_content_variants() -> None:
     assert link.content.is_behind_paywall is False
 
 
-def test_find_submissions_filters_by_status_type_tier_and_tag_search() -> None:
-    repository = SubmissionRepository(initialize_database())
-
+def test_find_submissions_filters_by_status_type_tier_and_tag_search(
+    repository: SubmissionRepository,
+) -> None:
     result = repository.find_submissions(
         status=SubmissionStatus.PENDING,
         type_=SubmissionType.ARTICLE,
@@ -137,9 +151,9 @@ def test_find_submissions_filters_by_status_type_tier_and_tag_search() -> None:
     ]
 
 
-def test_find_submissions_searches_title_submitter_name_and_email() -> None:
-    repository = SubmissionRepository(initialize_database())
-
+def test_find_submissions_searches_title_submitter_name_and_email(
+    repository: SubmissionRepository,
+) -> None:
     title_result = repository.find_submissions(search="research")
     name_result = repository.find_submissions(search="mina")
     email_result = repository.find_submissions(search="ALEX@EXAMPLE.COM")
@@ -159,9 +173,9 @@ def test_find_submissions_searches_title_submitter_name_and_email() -> None:
     assert email_result.total == 2
 
 
-def test_find_submissions_sorts_and_paginates_with_filtered_total() -> None:
-    repository = SubmissionRepository(initialize_database())
-
+def test_find_submissions_sorts_and_paginates_with_filtered_total(
+    repository: SubmissionRepository,
+) -> None:
     result = repository.find_submissions(
         sort_by="score",
         sort_order="desc",
@@ -176,9 +190,9 @@ def test_find_submissions_sorts_and_paginates_with_filtered_total() -> None:
     ]
 
 
-def test_find_submissions_sorts_by_flag_count_ascending() -> None:
-    repository = SubmissionRepository(initialize_database())
-
+def test_find_submissions_sorts_by_flag_count_ascending(
+    repository: SubmissionRepository,
+) -> None:
     result = repository.find_submissions(
         sort_by="flagCount",
         sort_order="asc",
@@ -195,8 +209,9 @@ def test_find_submissions_sorts_by_flag_count_ascending() -> None:
     ]
 
 
-def test_add_submission_persists_complete_domain_model() -> None:
-    repository = SubmissionRepository(initialize_database())
+def test_add_submission_persists_complete_domain_model(
+    repository: SubmissionRepository,
+) -> None:
     timestamp = datetime(2026, 5, 31, 10, 0, tzinfo=UTC)
     submission = Submission(
         id="c200000000000000000000099",
@@ -230,8 +245,9 @@ def test_add_submission_persists_complete_domain_model() -> None:
     assert [item.id for item in repository.list_submissions()][-1] == submission.id
 
 
-def test_update_submission_replaces_tags_content_and_review() -> None:
-    repository = SubmissionRepository(initialize_database())
+def test_update_submission_replaces_tags_content_and_review(
+    repository: SubmissionRepository,
+) -> None:
     timestamp = datetime(2026, 5, 31, 11, 0, tzinfo=UTC)
     original = repository.get_submission("c200000000000000000000001")
     assert original is not None
@@ -271,8 +287,9 @@ def test_update_submission_replaces_tags_content_and_review() -> None:
     assert persisted.review.reviewer.email == "admin@example.com"
 
 
-def test_update_submission_returns_none_for_missing_submission() -> None:
-    repository = SubmissionRepository(initialize_database())
+def test_update_submission_returns_none_for_missing_submission(
+    repository: SubmissionRepository,
+) -> None:
     missing = _new_link_submission("c200000000000000000000099")
 
     result = repository.update_submission(missing)
@@ -280,8 +297,9 @@ def test_update_submission_returns_none_for_missing_submission() -> None:
     assert result is None
 
 
-def test_delete_submission_removes_submission_and_child_rows() -> None:
-    repository = SubmissionRepository(initialize_database())
+def test_delete_submission_removes_submission_and_child_rows(
+    repository: SubmissionRepository,
+) -> None:
 
     deleted = repository.delete_submission("c200000000000000000000003")
 
@@ -294,8 +312,9 @@ def test_delete_submission_removes_submission_and_child_rows() -> None:
     ]
 
 
-def test_delete_submission_returns_false_for_missing_submission() -> None:
-    repository = SubmissionRepository(initialize_database())
+def test_delete_submission_returns_false_for_missing_submission(
+    repository: SubmissionRepository,
+) -> None:
 
     deleted = repository.delete_submission("c999999999999999999999999")
 

@@ -1,10 +1,25 @@
-from app.db.session import initialize_database
+from collections.abc import Iterator
+
+import pytest
+
+from app.db.session import connect_database, reset_database
 from app.repositories.dashboard_repository import DashboardRepository
 
 
-def test_dashboard_repository_returns_summary_counts() -> None:
-    repository = DashboardRepository(initialize_database())
+@pytest.fixture
+def repository(tmp_path) -> Iterator[DashboardRepository]:
+    database_path = tmp_path / "content.db"
+    reset_database(database_path)
+    connection = connect_database(database_path)
+    try:
+        yield DashboardRepository(connection)
+    finally:
+        connection.close()
 
+
+def test_dashboard_repository_returns_summary_counts(
+    repository: DashboardRepository,
+) -> None:
     stats = repository.stats()
 
     assert stats.summary.total_submissions == 4
@@ -14,9 +29,9 @@ def test_dashboard_repository_returns_summary_counts() -> None:
     assert stats.summary.flagged_count == 1
 
 
-def test_dashboard_repository_returns_by_type_counts_and_approval_rates() -> None:
-    repository = DashboardRepository(initialize_database())
-
+def test_dashboard_repository_returns_by_type_counts_and_approval_rates(
+    repository: DashboardRepository,
+) -> None:
     stats = repository.stats()
 
     assert [(item.type, item.count, item.approval_rate) for item in stats.by_type] == [
@@ -27,9 +42,9 @@ def test_dashboard_repository_returns_by_type_counts_and_approval_rates() -> Non
     ]
 
 
-def test_dashboard_repository_returns_recent_activity() -> None:
-    repository = DashboardRepository(initialize_database())
-
+def test_dashboard_repository_returns_recent_activity(
+    repository: DashboardRepository,
+) -> None:
     stats = repository.stats()
 
     assert len(stats.recent_activity) == 4
@@ -46,9 +61,9 @@ def test_dashboard_repository_returns_recent_activity() -> None:
     }
 
 
-def test_dashboard_repository_returns_top_submitters() -> None:
-    repository = DashboardRepository(initialize_database())
-
+def test_dashboard_repository_returns_top_submitters(
+    repository: DashboardRepository,
+) -> None:
     stats = repository.stats()
 
     assert [

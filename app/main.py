@@ -1,13 +1,25 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 
+from app.core.config import Settings, get_settings
 from app.core.errors import register_error_handlers
-from app.dependencies import reset_database
+from app.db.session import initialize_runtime_database
 from app.routers import auth, dashboard, submissions
 
 
-def create_app() -> FastAPI:
-    reset_database()
+def create_app(database_path: str | Path | None = None) -> FastAPI:
+    settings = (
+        Settings(database_path=Path(database_path))
+        if database_path is not None
+        else get_settings()
+    )
+    initialize_runtime_database(settings.database_path)
+
     app = FastAPI(title="Content API", version="1.0.0")
+    app.state.settings = settings
+    app.dependency_overrides[get_settings] = lambda: settings
+
     register_error_handlers(app)
     app.include_router(auth.router, prefix="/api")
     app.include_router(submissions.router, prefix="/api")

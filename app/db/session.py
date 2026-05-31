@@ -6,7 +6,9 @@ from app.db.seed import seed_database
 
 
 def initialize_database(database_path: str | Path = ":memory:") -> sqlite3.Connection:
-    connection = sqlite3.connect(database_path)
+    # Shared in-memory runtime state is used by FastAPI sync endpoints running in
+    # worker threads. A later request-scoped DB lifecycle should remove this.
+    connection = sqlite3.connect(database_path, check_same_thread=False)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     connection.executescript(_read_schema())

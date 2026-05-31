@@ -1,16 +1,18 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from math import ceil
 from typing import Literal
 
 from app.core.errors import ApiError
+from app.domain import submission as domain
+from app.mappers.submission_mapper import to_domain_content, to_submission_schema
+from app.repositories.submission_repository import SubmissionRepository
 from app.schemas.auth import AuthUser
 from app.schemas.common import Pagination
 from app.schemas.submission import (
     BatchDeleteBody,
     BatchReviewBody,
     DeletedCountResponse,
-    Review,
-    Reviewer,
     SortOrder,
     Submission,
     SubmissionCreateBody,
@@ -19,16 +21,14 @@ from app.schemas.submission import (
     SubmissionStatusUpdateBody,
     SubmissionType,
     SubmissionUpdateBody,
-    Submitter,
     SubmitterTier,
     UpdatedCountResponse,
 )
-from app.stores.submission_store import InMemorySubmissionStore
 
 
 class SubmissionService:
-    def __init__(self, store: InMemorySubmissionStore) -> None:
-        self._store = store
+    def __init__(self, repository: SubmissionRepository) -> None:
+        self._repository = repository
 
     def list_submissions(
         self,
@@ -42,94 +42,99 @@ class SubmissionService:
         sort_by: Literal["createdAt", "score", "flagCount"] = "createdAt",
         sort_order: SortOrder = "desc",
     ) -> SubmissionListResponse:
-        query = search.strip().lower() if search else None
-        submissions = [
-            submission
-            for submission in self._store.list_submissions()
-            if self._matches_filters(
-                submission,
-                status=status,
-                type_=type_,
-                tier=tier,
-                query=query,
-            )
-        ]
-
-        submissions.sort(
-            key=lambda submission: self._sort_value(submission, sort_by),
-            reverse=sort_order == "desc",
+        result = self._repository.find_submissions(
+            status=domain.SubmissionStatus(status) if status else None,
+            type_=domain.SubmissionType(type_) if type_ else None,
+            tier=domain.SubmitterTier(tier) if tier else None,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=page_size,
+            offset=(page - 1) * page_size,
         )
 
-        total = len(submissions)
-        start = (page - 1) * page_size
-        end = start + page_size
-
         return SubmissionListResponse(
-            data=submissions[start:end],
+            data=[to_submission_schema(submission) for submission in result.data],
             pagination=Pagination(
                 page=page,
                 pageSize=page_size,
-                total=total,
-                totalPages=ceil(total / page_size) if total else 0,
+                total=result.total,
+                totalPages=ceil(result.total / page_size) if result.total else 0,
             ),
         )
 
     def get_submission(self, submission_id: str) -> Submission:
-        submission = self._store.get_submission(submission_id)
-        if submission is not None:
-            return submission
-
-        raise ApiError(404, "submission_not_found", "Submission not found")
+        return to_submission_schema(self._get_domain_submission(submission_id))
 
     def create_submission(self, body: SubmissionCreateBody) -> Submission:
+        submitter = self._submitter_for_email(str(body.submitter_email))
         now = datetime.now(UTC)
-        submission = Submission(
-            id=self._store.generate_submission_id(),
+        submission = domain.Submission(
+            id=self._generate_submission_id(),
             title=body.title,
-            status="pending",
-            submitter=self._submitter_for_email(str(body.submitter_email)),
-            content=body.content,
+            status=domain.SubmissionStatus.PENDING,
+            submitter=submitter,
+            content=to_domain_content(body.content),
             tags=body.tags,
             review=None,
             score=0,
-            flagCount=0,
-            createdAt=now,
-            updatedAt=now,
+            flag_count=0,
+            created_at=now,
+            updated_at=now,
         )
-        self._store.add_submission(submission)
-        return submission
+
+        return to_submission_schema(self._repository.add_submission(submission))
 
     def update_submission(
         self,
         submission_id: str,
         body: SubmissionUpdateBody,
     ) -> Submission:
-        submission = self.get_submission(submission_id)
+        submission = self._get_domain_submission(submission_id)
         update_data = body.model_dump(exclude_unset=True)
 
-        if "title" in update_data:
-            submission.title = body.title or submission.title
-        if "tags" in update_data:
-            submission.tags = body.tags or []
-        if "content" in update_data and body.content is not None:
-            submission.content = body.content
+        updated = replace(
+            submission,
+            title=(
+                body.title or submission.title
+                if "title" in update_data
+                else submission.title
+            ),
+            tags=(body.tags or [] if "tags" in update_data else submission.tags),
+            content=(
+                to_domain_content(body.content)
+                if "content" in update_data and body.content is not None
+                else submission.content
+            ),
+            updated_at=datetime.now(UTC),
+        )
 
-        submission.updated_at = datetime.now(UTC)
-        return submission
+        saved = self._repository.update_submission(updated)
+        if saved is None:
+            raise ApiError(404, "submission_not_found", "Submission not found")
+
+        return to_submission_schema(saved)
 
     def update_status(
         self,
         submission_id: str,
         body: SubmissionStatusUpdateBody,
     ) -> Submission:
-        submission = self.get_submission(submission_id)
-        submission.status = body.status
-        submission.updated_at = datetime.now(UTC)
-        return submission
+        submission = self._get_domain_submission(submission_id)
+        updated = replace(
+            submission,
+            status=domain.SubmissionStatus(body.status),
+            updated_at=datetime.now(UTC),
+        )
+        saved = self._repository.update_submission(updated)
+        if saved is None:
+            raise ApiError(404, "submission_not_found", "Submission not found")
+
+        return to_submission_schema(saved)
 
     def delete_submission(self, submission_id: str) -> None:
-        submission = self.get_submission(submission_id)
-        self._store.remove_submission(submission)
+        self._get_domain_submission(submission_id)
+        self._repository.delete_submission(submission_id)
 
     def batch_review(
         self,
@@ -140,14 +145,22 @@ class SubmissionService:
         now = datetime.now(UTC)
 
         for submission in submissions:
-            submission.status = body.verdict
-            submission.review = Review(
-                reviewer=Reviewer(name=reviewer.name, email=reviewer.email),
-                verdict=body.verdict,
-                reason=body.reason,
-                reviewedAt=now,
+            self._repository.update_submission(
+                replace(
+                    submission,
+                    status=domain.SubmissionStatus(body.verdict),
+                    review=domain.Review(
+                        reviewer=domain.Reviewer(
+                            name=reviewer.name,
+                            email=str(reviewer.email),
+                        ),
+                        verdict=domain.ReviewVerdict(body.verdict),
+                        reason=body.reason,
+                        reviewed_at=now,
+                    ),
+                    updated_at=now,
+                )
             )
-            submission.updated_at = now
 
         return UpdatedCountResponse(updatedCount=len(submissions))
 
@@ -155,60 +168,39 @@ class SubmissionService:
         submissions = self._submissions_by_ids(body.ids)
 
         for submission in submissions:
-            self._store.remove_submission(submission)
+            self._repository.delete_submission(submission.id)
 
         return DeletedCountResponse(deletedCount=len(submissions))
 
-    def _submitter_for_email(self, email: str) -> Submitter:
-        submitter = self._store.get_submitter_by_email(email)
+    def _get_domain_submission(self, submission_id: str) -> domain.Submission:
+        submission = self._repository.get_submission(submission_id)
+        if submission is None:
+            raise ApiError(404, "submission_not_found", "Submission not found")
+
+        return submission
+
+    def _submitter_for_email(self, email: str) -> domain.Submitter:
+        submitter = self._repository.get_submitter_by_email(email)
         if submitter is None:
             raise ApiError(404, "submitter_not_found", "Submitter not found")
 
         return submitter
 
-    def _submissions_by_ids(self, ids: list[str]) -> list[Submission]:
+    def _submissions_by_ids(self, ids: list[str]) -> list[domain.Submission]:
         unique_ids = list(dict.fromkeys(ids))
-        submissions_by_id = self._store.get_submissions_by_ids(unique_ids)
-
-        for submission_id in unique_ids:
-            if submission_id not in submissions_by_id:
-                raise ApiError(404, "submission_not_found", "Submission not found")
-
-        return [submissions_by_id[submission_id] for submission_id in unique_ids]
-
-    def _matches_filters(
-        self,
-        submission: Submission,
-        *,
-        status: SubmissionStatus | None,
-        type_: SubmissionType | None,
-        tier: SubmitterTier | None,
-        query: str | None,
-    ) -> bool:
-        return (
-            (status is None or submission.status == status)
-            and (type_ is None or submission.content.type == type_)
-            and (tier is None or submission.submitter.tier == tier)
-            and (not query or self._matches_search(submission, query))
-        )
-
-    def _matches_search(self, submission: Submission, query: str) -> bool:
-        searchable_values = [
-            submission.title,
-            *submission.tags,
-            submission.submitter.name,
-            str(submission.submitter.email),
+        submissions = [
+            self._repository.get_submission(submission_id)
+            for submission_id in unique_ids
         ]
-        return any(query in value.lower() for value in searchable_values)
 
-    def _sort_value(
-        self,
-        submission: Submission,
-        sort_by: Literal["createdAt", "score", "flagCount"],
-    ) -> datetime | int:
-        if sort_by == "createdAt":
-            return submission.created_at
-        if sort_by == "score":
-            return submission.score
+        if any(submission is None for submission in submissions):
+            raise ApiError(404, "submission_not_found", "Submission not found")
 
-        return submission.flag_count
+        return [submission for submission in submissions if submission is not None]
+
+    def _generate_submission_id(self) -> str:
+        existing_values = [
+            int(submission.id[1:], 16)
+            for submission in self._repository.list_submissions()
+        ]
+        return f"c{max(existing_values, default=0) + 1:024x}"

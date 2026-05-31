@@ -18,6 +18,41 @@ def to_submission_schema(submission: domain.Submission) -> schema.Submission:
     )
 
 
+def to_domain_content(content: schema.Content) -> domain.Content:
+    thumbnail_url = str(content.thumbnail_url) if content.thumbnail_url else None
+
+    if isinstance(content, schema.ArticleContent):
+        return domain.ArticleContent(
+            url=str(content.url),
+            thumbnail_url=thumbnail_url,
+            word_count=content.word_count,
+            reading_time=content.reading_time,
+        )
+
+    if isinstance(content, schema.ImageContent):
+        return domain.ImageContent(
+            url=str(content.url),
+            thumbnail_url=thumbnail_url,
+            width=content.width,
+            height=content.height,
+        )
+
+    if isinstance(content, schema.VideoContent):
+        return domain.VideoContent(
+            url=str(content.url),
+            thumbnail_url=thumbnail_url,
+            duration=content.duration,
+            resolution=domain.VideoResolution(content.resolution),
+        )
+
+    return domain.LinkContent(
+        url=str(content.url),
+        thumbnail_url=thumbnail_url,
+        domain=content.domain,
+        is_behind_paywall=content.is_behind_paywall,
+    )
+
+
 def _to_submitter_schema(submitter: domain.Submitter) -> schema.Submitter:
     return schema.Submitter(
         id=submitter.id,

@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 
 from app.core.errors import register_error_handlers
-from app.dependencies import reset_submission_store
+from app.dependencies import reset_database
 from app.routers import auth, dashboard, submissions
 
 
 def create_app() -> FastAPI:
-    reset_submission_store()
+    reset_database()
     app = FastAPI(title="Content API", version="1.0.0")
     register_error_handlers(app)
     app.include_router(auth.router, prefix="/api")

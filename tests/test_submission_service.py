@@ -1,0 +1,64 @@
+from app.core.errors import ApiError
+from app.db.session import initialize_database
+from app.repositories.submission_repository import SubmissionRepository
+from app.schemas.auth import AuthUser
+from app.schemas.submission import BatchReviewBody, SubmissionCreateBody
+from app.services.submission_service import SubmissionService
+
+
+def test_submission_service_creates_and_lists_with_sqlite_repository() -> None:
+    service = SubmissionService(SubmissionRepository(initialize_database()))
+    body = SubmissionCreateBody(
+        title="SQLite service article",
+        tags=["sqlite"],
+        content={
+            "type": "article",
+            "url": "https://example.com/articles/sqlite-service",
+            "thumbnailUrl": None,
+            "wordCount": 900,
+            "readingTime": 5,
+        },
+        submitterEmail="alex@example.com",
+    )
+
+    created = service.create_submission(body)
+    listing = service.list_submissions(search="sqlite service")
+    fetched = service.get_submission(created.id)
+
+    assert created.title == "SQLite service article"
+    assert created.status == "pending"
+    assert created.submitter.email == "alex@example.com"
+    assert created.content.type == "article"
+    assert fetched.id == created.id
+    assert listing.pagination.total == 1
+    assert listing.data[0].id == created.id
+
+
+def test_batch_review_is_all_or_nothing_with_sqlite_repository() -> None:
+    service = SubmissionService(SubmissionRepository(initialize_database()))
+    listing = service.list_submissions()
+    existing = listing.data[0]
+
+    try:
+        service.batch_review(
+            BatchReviewBody(
+                ids=[existing.id, "c999999999999999999999999"],
+                verdict="approved",
+                reason="This content is ready for publishing",
+            ),
+            AuthUser(
+                id="c300000000000000000000001",
+                name="Demo Reviewer",
+                email="reviewer@example.com",
+                role="reviewer",
+            ),
+        )
+    except ApiError as error:
+        assert error.status_code == 404
+        assert error.code == "submission_not_found"
+    else:
+        raise AssertionError("Expected missing submission to raise ApiError")
+
+    unchanged = service.get_submission(existing.id)
+    assert unchanged.status == existing.status
+    assert unchanged.review == existing.review

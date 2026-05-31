@@ -20,3 +20,7 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.sqlfluff.core]
+dialect = "sqlite"
+exclude_rules = "layout.long_lines"

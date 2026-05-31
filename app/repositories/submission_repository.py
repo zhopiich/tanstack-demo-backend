@@ -75,6 +75,262 @@ class SubmissionRepository:
             return None
         return self._to_submitter(row)
 
+    def add_submission(self, submission: domain.Submission) -> domain.Submission:
+        with self._connection:
+            self._insert_submission(submission)
+
+        created = self.get_submission(submission.id)
+        if created is None:
+            raise RuntimeError("Created submission could not be loaded")
+        return created
+
+    def update_submission(
+        self, submission: domain.Submission
+    ) -> domain.Submission | None:
+        if self.get_submission(submission.id) is None:
+            return None
+
+        with self._connection:
+            self._connection.execute(
+                """
+                UPDATE submissions
+                SET
+                    title = :title,
+                    status = :status,
+                    submitter_id = :submitter_id,
+                    content_type = :content_type,
+                    content_url = :content_url,
+                    thumbnail_url = :thumbnail_url,
+                    score = :score,
+                    flag_count = :flag_count,
+                    created_at = :created_at,
+                    updated_at = :updated_at
+                WHERE id = :id
+                """,
+                self._submission_row(submission),
+            )
+            self._replace_tags(submission)
+            self._replace_content(submission)
+            self._replace_review(submission)
+
+        return self.get_submission(submission.id)
+
+    def delete_submission(self, submission_id: str) -> bool:
+        with self._connection:
+            cursor = self._connection.execute(
+                """
+                DELETE FROM submissions
+                WHERE id = ?
+                """,
+                (submission_id,),
+            )
+
+        return cursor.rowcount > 0
+
+    def _insert_submission(self, submission: domain.Submission) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO submissions (
+                id,
+                title,
+                status,
+                submitter_id,
+                content_type,
+                content_url,
+                thumbnail_url,
+                score,
+                flag_count,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                :id,
+                :title,
+                :status,
+                :submitter_id,
+                :content_type,
+                :content_url,
+                :thumbnail_url,
+                :score,
+                :flag_count,
+                :created_at,
+                :updated_at
+            )
+            """,
+            self._submission_row(submission),
+        )
+        self._insert_tags(submission)
+        self._insert_content(submission)
+        self._insert_review(submission)
+
+    def _submission_row(self, submission: domain.Submission) -> dict[str, object]:
+        return {
+            "id": submission.id,
+            "title": submission.title,
+            "status": submission.status.value,
+            "submitter_id": submission.submitter.id,
+            "content_type": submission.content.type.value,
+            "content_url": submission.content.url,
+            "thumbnail_url": submission.content.thumbnail_url,
+            "score": submission.score,
+            "flag_count": submission.flag_count,
+            "created_at": submission.created_at.isoformat(),
+            "updated_at": submission.updated_at.isoformat(),
+        }
+
+    def _insert_tags(self, submission: domain.Submission) -> None:
+        self._connection.executemany(
+            """
+            INSERT INTO submission_tags (submission_id, tag, position)
+            VALUES (:submission_id, :tag, :position)
+            """,
+            [
+                {
+                    "submission_id": submission.id,
+                    "tag": tag,
+                    "position": position,
+                }
+                for position, tag in enumerate(submission.tags)
+            ],
+        )
+
+    def _insert_content(self, submission: domain.Submission) -> None:
+        content = submission.content
+        if isinstance(content, domain.ArticleContent):
+            self._connection.execute(
+                """
+                INSERT INTO submission_articles (
+                    submission_id,
+                    word_count,
+                    reading_time
+                )
+                VALUES (:submission_id, :word_count, :reading_time)
+                """,
+                {
+                    "submission_id": submission.id,
+                    "word_count": content.word_count,
+                    "reading_time": content.reading_time,
+                },
+            )
+            return
+
+        if isinstance(content, domain.ImageContent):
+            self._connection.execute(
+                """
+                INSERT INTO submission_images (submission_id, width, height)
+                VALUES (:submission_id, :width, :height)
+                """,
+                {
+                    "submission_id": submission.id,
+                    "width": content.width,
+                    "height": content.height,
+                },
+            )
+            return
+
+        if isinstance(content, domain.VideoContent):
+            self._connection.execute(
+                """
+                INSERT INTO submission_videos (
+                    submission_id,
+                    duration,
+                    resolution
+                )
+                VALUES (:submission_id, :duration, :resolution)
+                """,
+                {
+                    "submission_id": submission.id,
+                    "duration": content.duration,
+                    "resolution": content.resolution.value,
+                },
+            )
+            return
+
+        self._connection.execute(
+            """
+            INSERT INTO submission_links (
+                submission_id,
+                domain,
+                is_behind_paywall
+            )
+            VALUES (:submission_id, :domain, :is_behind_paywall)
+            """,
+            {
+                "submission_id": submission.id,
+                "domain": content.domain,
+                "is_behind_paywall": int(content.is_behind_paywall),
+            },
+        )
+
+    def _replace_content(self, submission: domain.Submission) -> None:
+        self._delete_content(submission.id)
+        self._insert_content(submission)
+
+    def _delete_content(self, submission_id: str) -> None:
+        for table_name in (
+            "submission_articles",
+            "submission_images",
+            "submission_videos",
+            "submission_links",
+        ):
+            self._connection.execute(
+                f"DELETE FROM {table_name} WHERE submission_id = ?",
+                (submission_id,),
+            )
+
+    def _replace_tags(self, submission: domain.Submission) -> None:
+        self._connection.execute(
+            """
+            DELETE FROM submission_tags
+            WHERE submission_id = ?
+            """,
+            (submission.id,),
+        )
+        self._insert_tags(submission)
+
+    def _insert_review(self, submission: domain.Submission) -> None:
+        if submission.review is None:
+            return
+
+        self._connection.execute(
+            """
+            INSERT INTO reviews (
+                submission_id,
+                reviewer_name,
+                reviewer_email,
+                verdict,
+                reason,
+                reviewed_at
+            )
+            VALUES (
+                :submission_id,
+                :reviewer_name,
+                :reviewer_email,
+                :verdict,
+                :reason,
+                :reviewed_at
+            )
+            """,
+            {
+                "submission_id": submission.id,
+                "reviewer_name": submission.review.reviewer.name,
+                "reviewer_email": submission.review.reviewer.email,
+                "verdict": submission.review.verdict.value,
+                "reason": submission.review.reason,
+                "reviewed_at": submission.review.reviewed_at.isoformat(),
+            },
+        )
+
+    def _replace_review(self, submission: domain.Submission) -> None:
+        self._connection.execute(
+            """
+            DELETE FROM reviews
+            WHERE submission_id = ?
+            """,
+            (submission.id,),
+        )
+        self._insert_review(submission)
+
     def _to_submitter(self, row: sqlite3.Row) -> domain.Submitter:
         return domain.Submitter(
             id=row["id"],

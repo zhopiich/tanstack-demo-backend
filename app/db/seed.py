@@ -2,6 +2,37 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
+from app.core.passwords import hash_password
+
+
+def _seed_auth_user_rows() -> list[dict[str, Any]]:
+    created_at = datetime(2026, 5, 29, 8, 0, tzinfo=UTC).isoformat()
+
+    return [
+        {
+            "id": "a100000000000000000000001",
+            "name": "Reviewer User",
+            "email": "reviewer@example.com",
+            "role": "reviewer",
+            "password_hash": hash_password(
+                "password123",
+                salt=bytes.fromhex("00000000000000000000000000000001"),
+            ),
+            "created_at": created_at,
+        },
+        {
+            "id": "a100000000000000000000002",
+            "name": "Admin User",
+            "email": "admin@example.com",
+            "role": "admin",
+            "password_hash": hash_password(
+                "password123",
+                salt=bytes.fromhex("00000000000000000000000000000002"),
+            ),
+            "created_at": created_at,
+        },
+    ]
+
 
 def _seed_submission_rows() -> list[dict[str, Any]]:
     now = datetime(2026, 5, 29, 8, 0, tzinfo=UTC).isoformat()
@@ -103,6 +134,14 @@ def _seed_submission_rows() -> list[dict[str, Any]]:
 
 
 def seed_database(connection: sqlite3.Connection) -> None:
+    connection.executemany(
+        """
+        INSERT INTO auth_users (id, name, email, role, password_hash, created_at)
+        VALUES (:id, :name, :email, :role, :password_hash, :created_at)
+        """,
+        _seed_auth_user_rows(),
+    )
+
     submissions = _seed_submission_rows()
     submitters_by_id = {
         submission["submitter"]["id"]: submission["submitter"]

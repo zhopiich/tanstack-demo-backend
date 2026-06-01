@@ -160,8 +160,31 @@ def test_me_returns_admin_user(client: TestClient) -> None:
     assert response.json()["data"]["role"] == "admin"
 
 
-def test_logout_returns_204(client: TestClient, auth_headers: dict[str, str]) -> None:
-    response = client.post("/api/auth/logout", headers=auth_headers)
+def test_logout_returns_204_revokes_refresh_and_clears_cookie(
+    client: TestClient,
+) -> None:
+    client.post(
+        "/api/auth/login",
+        json={"email": "reviewer@example.com", "password": "password123"},
+    )
+
+    response = client.post("/api/auth/logout")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert "refresh_token=" in response.headers["set-cookie"]
+    assert "Max-Age=0" in response.headers["set-cookie"]
+
+    refresh = client.post("/api/auth/refresh")
+    assert refresh.status_code == 401
+
+
+def test_logout_without_refresh_cookie_still_returns_204(
+    client: TestClient,
+) -> None:
+    client.cookies.clear()
+
+    response = client.post("/api/auth/logout")
 
     assert response.status_code == 204
     assert response.content == b""

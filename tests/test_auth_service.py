@@ -83,6 +83,40 @@ def test_refresh_rejects_invalid_token(tmp_path) -> None:
     connection.close()
 
 
+def test_logout_revokes_refresh_session(tmp_path) -> None:
+    service, connection, _ = _service(tmp_path)
+    login = service.login("reviewer@example.com", "password123")
+    assert login is not None
+
+    service.logout(login.refresh_token)
+
+    assert service.refresh(login.refresh_token) is None
+    revoked_count = connection.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM auth_sessions
+        WHERE revoked_at IS NOT NULL
+        """
+    ).fetchone()["count"]
+    assert revoked_count == 1
+    connection.close()
+
+
+def test_logout_is_idempotent_for_missing_or_invalid_token(tmp_path) -> None:
+    service, connection, _ = _service(tmp_path)
+
+    service.logout(None)
+    service.logout("invalid-refresh-token")
+
+    assert (
+        connection.execute("SELECT COUNT(*) AS count FROM auth_sessions").fetchone()[
+            "count"
+        ]
+        == 0
+    )
+    connection.close()
+
+
 def _service(tmp_path):
     database_path = tmp_path / "content.db"
     reset_database(database_path)

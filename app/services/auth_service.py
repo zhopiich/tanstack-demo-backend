@@ -61,6 +61,20 @@ class AuthService:
             refresh_token=new_refresh_token,
         )
 
+    def logout(self, refresh_token: str | None) -> None:
+        if refresh_token is None:
+            return
+
+        now = datetime.now(UTC)
+        session = self._repository.get_active_session_by_refresh_token_hash(
+            hash_refresh_token(refresh_token),
+            now=now,
+        )
+        if session is None:
+            return
+
+        self._repository.revoke_session(session.id, revoked_at=now)
+
     def _issue_auth_result(self, user: DomainAuthUser) -> AuthResult:
         refresh_token = generate_refresh_token()
         now = datetime.now(UTC)

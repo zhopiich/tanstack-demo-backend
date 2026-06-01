@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, Response
+from fastapi import APIRouter, Cookie, Depends, Request, Response
 
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
@@ -54,8 +54,16 @@ def refresh(
 
 
 @router.post("/logout", status_code=204)
-def logout(_: Annotated[AuthUser, Depends(require_current_user)]) -> Response:
-    return Response(status_code=204)
+def logout(
+    request: Request,
+    response: Response,
+    service: Annotated[AuthService, Depends(get_auth_service)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> Response:
+    refresh_token = request.cookies.get(settings.refresh_cookie_name)
+    service.logout(refresh_token)
+    _clear_refresh_cookie(response, settings=settings)
+    return Response(status_code=204, headers=dict(response.headers))
 
 
 @router.get("/me", response_model=CurrentUserResponse)
@@ -86,4 +94,13 @@ def _set_refresh_cookie(
         secure=settings.refresh_cookie_secure,
         samesite=settings.refresh_cookie_samesite,
         path=settings.refresh_cookie_path,
+    )
+
+
+def _clear_refresh_cookie(response: Response, *, settings: Settings) -> None:
+    response.delete_cookie(
+        key=settings.refresh_cookie_name,
+        path=settings.refresh_cookie_path,
+        secure=settings.refresh_cookie_secure,
+        samesite=settings.refresh_cookie_samesite,
     )

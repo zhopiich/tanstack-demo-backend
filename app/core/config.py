@@ -10,6 +10,7 @@ class Settings:
     database_path: Path
     jwt_secret_key: str
     jwt_algorithm: str
+    password_hash_iterations: int
     access_token_expires_seconds: int
     refresh_token_expires_seconds: int
     refresh_cookie_name: str
@@ -31,6 +32,9 @@ class Settings:
             database_path=Path(source.get("DATABASE_PATH", "data/app.db")),
             jwt_secret_key=source.get("JWT_SECRET_KEY", "dev-secret-key-change-me"),
             jwt_algorithm=source.get("JWT_ALGORITHM", "HS256"),
+            password_hash_iterations=int(
+                source.get("PASSWORD_HASH_ITERATIONS", "600000")
+            ),
             access_token_expires_seconds=int(
                 source.get("ACCESS_TOKEN_EXPIRES_SECONDS", "900")
             ),

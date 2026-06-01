@@ -28,6 +28,7 @@ def test_settings_auth_defaults() -> None:
 
     assert settings.jwt_secret_key == "dev-secret-key-change-me"
     assert settings.jwt_algorithm == "HS256"
+    assert settings.password_hash_iterations == 600_000
     assert settings.access_token_expires_seconds == 900
     assert settings.refresh_token_expires_seconds == 604800
     assert settings.refresh_cookie_name == "refresh_token"
@@ -42,6 +43,7 @@ def test_settings_reads_auth_environment() -> None:
         {
             "JWT_SECRET_KEY": "test-secret",
             "JWT_ALGORITHM": "HS256",
+            "PASSWORD_HASH_ITERATIONS": "100",
             "ACCESS_TOKEN_EXPIRES_SECONDS": "60",
             "REFRESH_TOKEN_EXPIRES_SECONDS": "120",
             "REFRESH_COOKIE_NAME": "custom_refresh",
@@ -54,6 +56,7 @@ def test_settings_reads_auth_environment() -> None:
 
     assert settings.jwt_secret_key == "test-secret"
     assert settings.jwt_algorithm == "HS256"
+    assert settings.password_hash_iterations == 100
     assert settings.access_token_expires_seconds == 60
     assert settings.refresh_token_expires_seconds == 120
     assert settings.refresh_cookie_name == "custom_refresh"

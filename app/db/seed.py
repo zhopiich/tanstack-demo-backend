@@ -2,11 +2,13 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
+from app.core.config import Settings
 from app.core.passwords import hash_password
 
 
 def _seed_auth_user_rows() -> list[dict[str, Any]]:
     created_at = datetime(2026, 5, 29, 8, 0, tzinfo=UTC).isoformat()
+    password_hash_iterations = Settings.from_environment().password_hash_iterations
 
     return [
         {
@@ -17,6 +19,7 @@ def _seed_auth_user_rows() -> list[dict[str, Any]]:
             "password_hash": hash_password(
                 "password123",
                 salt=bytes.fromhex("00000000000000000000000000000001"),
+                iterations=password_hash_iterations,
             ),
             "created_at": created_at,
         },
@@ -28,6 +31,7 @@ def _seed_auth_user_rows() -> list[dict[str, Any]]:
             "password_hash": hash_password(
                 "password123",
                 salt=bytes.fromhex("00000000000000000000000000000002"),
+                iterations=password_hash_iterations,
             ),
             "created_at": created_at,
         },

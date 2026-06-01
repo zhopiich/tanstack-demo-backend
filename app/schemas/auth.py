@@ -16,8 +16,10 @@ class AuthUser(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    token: str
     user: AuthUser
+    accessToken: str
+    tokenType: Literal["Bearer"] = "Bearer"
+    expiresIn: int = Field(ge=1)
 
 
 class CurrentUserResponse(BaseModel):

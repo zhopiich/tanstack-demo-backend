@@ -18,7 +18,7 @@ def login(body: LoginBody) -> AuthResponse:
         raise ApiError(401, "invalid_credentials", "Invalid email or password")
 
     token, user = result
-    return AuthResponse(token=token, user=user)
+    return AuthResponse(accessToken=token, user=user, expiresIn=900)
 
 
 @router.post("/logout", status_code=204)

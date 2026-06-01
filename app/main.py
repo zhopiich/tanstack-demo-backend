@@ -1,19 +1,21 @@
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI
 
-from app.core.config import Settings, get_settings
+from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.db.session import initialize_runtime_database
 from app.routers import auth, dashboard, submissions
 
 
 def create_app(database_path: str | Path | None = None) -> FastAPI:
-    settings = (
-        Settings(database_path=Path(database_path))
-        if database_path is not None
-        else get_settings()
-    )
+    settings = get_settings()
+    if database_path is not None:
+        # Keep auth/token settings from the normal config path; constructing
+        # Settings(database_path=...) would omit required non-DB fields.
+        settings = replace(settings, database_path=Path(database_path))
+
     initialize_runtime_database(settings.database_path)
 
     app = FastAPI(title="Content API", version="1.0.0")

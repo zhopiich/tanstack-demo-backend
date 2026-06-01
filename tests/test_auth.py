@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 
 
-def test_login_returns_token_and_user(client: TestClient) -> None:
+def test_login_returns_access_token_user_and_refresh_cookie(
+    client: TestClient,
+) -> None:
     response = client.post(
         "/api/auth/login",
         json={"email": "reviewer@example.com", "password": "password123"},
@@ -9,15 +11,19 @@ def test_login_returns_token_and_user(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["accessToken"] == "dev-reviewer-token"
+    assert set(body) == {"user", "accessToken", "tokenType", "expiresIn"}
+    assert body["accessToken"]
     assert body["tokenType"] == "Bearer"
     assert body["expiresIn"] == 900
     assert body["user"] == {
         "id": "c000000000000000000000001",
-        "name": "Demo Reviewer",
+        "name": "Reviewer User",
         "email": "reviewer@example.com",
         "role": "reviewer",
     }
+    assert "refresh_token=" in response.headers["set-cookie"]
+    assert "HttpOnly" in response.headers["set-cookie"]
+    assert "Path=/api/auth" in response.headers["set-cookie"]
 
 
 def test_login_returns_admin_user(client: TestClient) -> None:
@@ -28,12 +34,12 @@ def test_login_returns_admin_user(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["accessToken"] == "dev-admin-token"
+    assert body["accessToken"]
     assert body["tokenType"] == "Bearer"
     assert body["expiresIn"] == 900
     assert body["user"] == {
         "id": "c000000000000000000000002",
-        "name": "Demo Admin",
+        "name": "Admin User",
         "email": "admin@example.com",
         "role": "admin",
     }

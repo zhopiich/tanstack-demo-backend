@@ -21,6 +21,21 @@ def test_create_app_initializes_missing_runtime_database(tmp_path) -> None:
     connection.close()
 
 
+def test_create_app_database_path_override_preserves_other_settings(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    database_path = tmp_path / "runtime.db"
+    monkeypatch.setenv("JWT_SECRET_KEY", "env-secret")
+    monkeypatch.setenv("ACCESS_TOKEN_EXPIRES_SECONDS", "60")
+
+    app = create_app(database_path=database_path)
+
+    assert app.state.settings.database_path == database_path
+    assert app.state.settings.jwt_secret_key == "env-secret"
+    assert app.state.settings.access_token_expires_seconds == 60
+
+
 def test_create_app_keeps_existing_runtime_database(tmp_path) -> None:
     database_path = tmp_path / "runtime.db"
     first_app = create_app(database_path=database_path)

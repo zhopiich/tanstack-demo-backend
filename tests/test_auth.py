@@ -9,7 +9,9 @@ def test_login_returns_token_and_user(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["token"] == "dev-reviewer-token"
+    assert body["accessToken"] == "dev-reviewer-token"
+    assert body["tokenType"] == "Bearer"
+    assert body["expiresIn"] == 900
     assert body["user"] == {
         "id": "c000000000000000000000001",
         "name": "Demo Reviewer",
@@ -26,7 +28,9 @@ def test_login_returns_admin_user(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["token"] == "dev-admin-token"
+    assert body["accessToken"] == "dev-admin-token"
+    assert body["tokenType"] == "Bearer"
+    assert body["expiresIn"] == 900
     assert body["user"] == {
         "id": "c000000000000000000000002",
         "name": "Demo Admin",

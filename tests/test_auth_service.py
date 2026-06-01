@@ -49,6 +49,40 @@ def test_login_rejects_invalid_credentials(tmp_path) -> None:
     connection.close()
 
 
+def test_refresh_rotates_refresh_token_and_keeps_one_session(tmp_path) -> None:
+    service, connection, settings = _service(tmp_path)
+    login = service.login("reviewer@example.com", "password123")
+    assert login is not None
+
+    refreshed = service.refresh(login.refresh_token)
+
+    assert refreshed is not None
+    assert refreshed.user.email == "reviewer@example.com"
+    assert refreshed.refresh_token != login.refresh_token
+    claims = decode_access_token(
+        refreshed.access_token,
+        secret_key=settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+    assert claims["sub"] == "c000000000000000000000001"
+    assert (
+        connection.execute("SELECT COUNT(*) AS count FROM auth_sessions").fetchone()[
+            "count"
+        ]
+        == 1
+    )
+    assert service.refresh(login.refresh_token) is None
+    connection.close()
+
+
+def test_refresh_rejects_invalid_token(tmp_path) -> None:
+    service, connection, _ = _service(tmp_path)
+
+    assert service.refresh("invalid-refresh-token") is None
+
+    connection.close()
+
+
 def _service(tmp_path):
     database_path = tmp_path / "content.db"
     reset_database(database_path)

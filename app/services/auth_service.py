@@ -36,6 +36,31 @@ class AuthService:
 
         return self._issue_auth_result(user)
 
+    def refresh(self, refresh_token: str) -> AuthResult | None:
+        now = datetime.now(UTC)
+        session = self._repository.get_active_session_by_refresh_token_hash(
+            hash_refresh_token(refresh_token),
+            now=now,
+        )
+        if session is None:
+            return None
+
+        new_refresh_token = generate_refresh_token()
+        rotated_session = self._repository.rotate_session(
+            session_id=session.id,
+            refresh_token_hash=hash_refresh_token(new_refresh_token),
+            rotated_at=now,
+            expires_at=now
+            + timedelta(seconds=self._settings.refresh_token_expires_seconds),
+        )
+        if rotated_session is None:
+            return None
+
+        return self._auth_result(
+            user=rotated_session.user,
+            refresh_token=new_refresh_token,
+        )
+
     def _issue_auth_result(self, user: DomainAuthUser) -> AuthResult:
         refresh_token = generate_refresh_token()
         now = datetime.now(UTC)
@@ -47,6 +72,14 @@ class AuthService:
             expires_at=now
             + timedelta(seconds=self._settings.refresh_token_expires_seconds),
         )
+        return self._auth_result(user=user, refresh_token=refresh_token)
+
+    def _auth_result(
+        self,
+        *,
+        user: DomainAuthUser,
+        refresh_token: str,
+    ) -> AuthResult:
         return AuthResult(
             user=to_auth_user_schema(user),
             access_token=create_access_token(

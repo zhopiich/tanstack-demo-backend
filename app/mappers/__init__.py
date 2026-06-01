@@ -1,2 +1,1 @@
 """Domain-to-schema mappers."""
-

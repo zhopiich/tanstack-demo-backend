@@ -43,4 +43,3 @@ class DashboardStatsReadModel:
     by_type: list[DashboardByTypeReadModel]
     recent_activity: list[RecentActivityReadModel]
     top_submitters: list[TopSubmitterReadModel]
-

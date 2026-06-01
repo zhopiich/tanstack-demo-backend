@@ -13,8 +13,9 @@ def test_create_app_initializes_missing_runtime_database(tmp_path) -> None:
     assert database_path.exists()
     connection = connect_database(database_path)
     assert (
-        connection.execute("SELECT COUNT(*) AS count FROM submissions")
-        .fetchone()["count"]
+        connection.execute("SELECT COUNT(*) AS count FROM submissions").fetchone()[
+            "count"
+        ]
         == 4
     )
     connection.close()

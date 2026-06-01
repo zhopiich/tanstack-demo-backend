@@ -3,22 +3,32 @@ from typing import Annotated
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
+from app.core.tokens import InvalidTokenError, decode_access_token
 from app.schemas.auth import AuthUser
-from app.services.auth_service import AuthService
 
 bearer_scheme = HTTPBearer(auto_error=False)
-auth_service = AuthService()
 
 
 def require_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> AuthUser:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise ApiError(401, "unauthorized", "Missing bearer token")
 
-    user = auth_service.get_user_for_token(credentials.credentials)
-    if user is None:
-        raise ApiError(401, "unauthorized", "Invalid bearer token")
-
-    return user
+    try:
+        claims = decode_access_token(
+            credentials.credentials,
+            secret_key=settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        return AuthUser(
+            id=str(claims["sub"]),
+            name=str(claims["name"]),
+            email=str(claims["email"]),
+            role=claims["role"],
+        )
+    except InvalidTokenError, KeyError, ValueError:
+        raise ApiError(401, "unauthorized", "Invalid bearer token") from None

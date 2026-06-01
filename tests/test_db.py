@@ -1,6 +1,7 @@
 import sqlite3
 import threading
 
+from app.core.passwords import verify_password
 from app.db.session import connect_database, initialize_runtime_database, reset_database
 
 
@@ -107,6 +108,59 @@ def test_reset_database_rebuilds_existing_database(tmp_path) -> None:
         == 0
     )
     rebuilt_connection.close()
+
+
+def test_reset_database_creates_auth_tables_and_seed_users(tmp_path) -> None:
+    database_path = tmp_path / "content.db"
+
+    reset_database(database_path)
+
+    connection = connect_database(database_path)
+    tables = {
+        row["name"]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+
+    assert {"auth_users", "auth_sessions"}.issubset(tables)
+    assert _count(connection, "auth_sessions") == 0
+
+    users = [
+        dict(row)
+        for row in connection.execute(
+            """
+            SELECT id, name, email, role, password_hash
+            FROM auth_users
+            ORDER BY email
+            """
+        ).fetchall()
+    ]
+
+    assert [
+        {
+            "id": user["id"],
+            "name": user["name"],
+            "email": user["email"],
+            "role": user["role"],
+        }
+        for user in users
+    ] == [
+        {
+            "id": "c000000000000000000000002",
+            "name": "Admin User",
+            "email": "admin@example.com",
+            "role": "admin",
+        },
+        {
+            "id": "c000000000000000000000001",
+            "name": "Reviewer User",
+            "email": "reviewer@example.com",
+            "role": "reviewer",
+        },
+    ]
+    assert all(verify_password("password123", user["password_hash"]) for user in users)
+    connection.close()
 
 
 def test_initialize_runtime_database_creates_database_when_missing(tmp_path) -> None:

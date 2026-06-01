@@ -8,7 +8,8 @@ from app.dependencies import get_database_connection
 def test_database_dependency_commits_successful_request(tmp_path) -> None:
     database_path = tmp_path / "content.db"
     reset_database(database_path)
-    dependency = get_database_connection(Settings(database_path=database_path))
+    settings = Settings.from_environment({"DATABASE_PATH": str(database_path)})
+    dependency = get_database_connection(settings)
     connection = next(dependency)
 
     connection.execute(
@@ -34,7 +35,8 @@ def test_database_dependency_commits_successful_request(tmp_path) -> None:
 def test_database_dependency_rolls_back_failed_request(tmp_path) -> None:
     database_path = tmp_path / "content.db"
     reset_database(database_path)
-    dependency = get_database_connection(Settings(database_path=database_path))
+    settings = Settings.from_environment({"DATABASE_PATH": str(database_path)})
+    dependency = get_database_connection(settings)
     connection = next(dependency)
 
     connection.execute(
@@ -60,7 +62,8 @@ def test_database_dependency_rolls_back_failed_request(tmp_path) -> None:
 def test_database_dependency_closes_connection(tmp_path) -> None:
     database_path = tmp_path / "content.db"
     reset_database(database_path)
-    dependency = get_database_connection(Settings(database_path=database_path))
+    settings = Settings.from_environment({"DATABASE_PATH": str(database_path)})
+    dependency = get_database_connection(settings)
     connection = next(dependency)
 
     with pytest.raises(StopIteration):

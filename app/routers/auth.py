@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Cookie, Depends, Response
 
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
@@ -22,6 +22,28 @@ def login(
     result = service.login(str(body.email), body.password)
     if result is None:
         raise ApiError(401, "invalid_credentials", "Invalid email or password")
+
+    _set_refresh_cookie(
+        response,
+        refresh_token=result.refresh_token,
+        settings=settings,
+    )
+    return _auth_response(result)
+
+
+@router.post("/refresh", response_model=AuthResponse)
+def refresh(
+    response: Response,
+    service: Annotated[AuthService, Depends(get_auth_service)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    refresh_token: Annotated[str | None, Cookie()] = None,
+) -> AuthResponse:
+    if refresh_token is None:
+        raise ApiError(401, "unauthorized", "Invalid refresh token")
+
+    result = service.refresh(refresh_token)
+    if result is None:
+        raise ApiError(401, "unauthorized", "Invalid refresh token")
 
     _set_refresh_cookie(
         response,

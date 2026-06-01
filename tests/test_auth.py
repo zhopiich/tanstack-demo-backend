@@ -88,6 +88,61 @@ def test_me_rejects_invalid_access_token(client: TestClient) -> None:
     assert response.json()["error"]["code"] == "unauthorized"
 
 
+def test_refresh_returns_access_token_and_rotates_refresh_cookie(
+    client: TestClient,
+) -> None:
+    client.post(
+        "/api/auth/login",
+        json={"email": "reviewer@example.com", "password": "password123"},
+    )
+    old_refresh_token = client.cookies.get("refresh_token")
+
+    response = client.post("/api/auth/refresh")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"user", "accessToken", "tokenType", "expiresIn"}
+    assert body["accessToken"]
+    assert body["tokenType"] == "Bearer"
+    assert body["expiresIn"] == 900
+    assert body["user"]["email"] == "reviewer@example.com"
+    assert client.cookies.get("refresh_token") != old_refresh_token
+    assert "refresh_token=" in response.headers["set-cookie"]
+
+
+def test_refresh_rejects_rotated_refresh_token(client: TestClient) -> None:
+    client.post(
+        "/api/auth/login",
+        json={"email": "reviewer@example.com", "password": "password123"},
+    )
+    old_refresh_token = client.cookies.get("refresh_token")
+    assert old_refresh_token is not None
+    assert client.post("/api/auth/refresh").status_code == 200
+
+    client.cookies.set("refresh_token", old_refresh_token, path="/api/auth")
+    response = client.post("/api/auth/refresh")
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {
+            "code": "unauthorized",
+            "message": "Invalid refresh token",
+        }
+    }
+
+
+def test_refresh_requires_refresh_cookie(client: TestClient) -> None:
+    response = client.post("/api/auth/refresh")
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {
+            "code": "unauthorized",
+            "message": "Invalid refresh token",
+        }
+    }
+
+
 def test_me_returns_admin_user(client: TestClient) -> None:
     login = client.post(
         "/api/auth/login",

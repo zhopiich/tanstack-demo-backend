@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.core.tokens import create_access_token
 from app.db.session import connect_database
 from app.main import create_app
 
@@ -39,12 +40,8 @@ def test_create_app_database_path_override_preserves_other_settings(
 def test_create_app_keeps_existing_runtime_database(tmp_path) -> None:
     database_path = tmp_path / "runtime.db"
     first_app = create_app(database_path=database_path)
+    auth_headers = _auth_headers()
     with TestClient(first_app) as client:
-        login = client.post(
-            "/api/auth/login",
-            json={"email": "reviewer@example.com", "password": "password123"},
-        )
-        auth_headers = {"Authorization": f"Bearer {login.json()['accessToken']}"}
         response = client.post(
             "/api/submissions",
             json={
@@ -65,11 +62,6 @@ def test_create_app_keeps_existing_runtime_database(tmp_path) -> None:
 
     second_app = create_app(database_path=database_path)
     with TestClient(second_app) as client:
-        login = client.post(
-            "/api/auth/login",
-            json={"email": "reviewer@example.com", "password": "password123"},
-        )
-        auth_headers = {"Authorization": f"Bearer {login.json()['accessToken']}"}
         listing = client.get(
             "/api/submissions",
             params={"search": "Persistent article"},
@@ -78,3 +70,18 @@ def test_create_app_keeps_existing_runtime_database(tmp_path) -> None:
 
     assert listing.status_code == 200
     assert listing.json()["pagination"]["total"] == 1
+
+
+def _auth_headers() -> dict[str, str]:
+    access_token = create_access_token(
+        claims={
+            "sub": "c000000000000000000000001",
+            "email": "reviewer@example.com",
+            "name": "Reviewer User",
+            "role": "reviewer",
+        },
+        secret_key="dev-secret-key-change-me",
+        algorithm="HS256",
+        expires_in_seconds=900,
+    )
+    return {"Authorization": f"Bearer {access_token}"}

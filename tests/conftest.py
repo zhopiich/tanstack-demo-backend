@@ -3,6 +3,7 @@ from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.tokens import create_access_token
 from app.main import create_app
 
 
@@ -14,10 +15,16 @@ def client(tmp_path) -> Generator[TestClient]:
 
 
 @pytest.fixture
-def auth_headers(client: TestClient) -> dict[str, str]:
-    response = client.post(
-        "/api/auth/login",
-        json={"email": "reviewer@example.com", "password": "password123"},
+def auth_headers() -> dict[str, str]:
+    access_token = create_access_token(
+        claims={
+            "sub": "c000000000000000000000001",
+            "email": "reviewer@example.com",
+            "name": "Reviewer User",
+            "role": "reviewer",
+        },
+        secret_key="dev-secret-key-change-me",
+        algorithm="HS256",
+        expires_in_seconds=900,
     )
-    access_token = response.json()["accessToken"]
     return {"Authorization": f"Bearer {access_token}"}

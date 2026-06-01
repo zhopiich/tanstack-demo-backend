@@ -147,13 +147,13 @@ def test_reset_database_creates_auth_tables_and_seed_users(tmp_path) -> None:
         for user in users
     ] == [
         {
-            "id": "a100000000000000000000002",
+            "id": "c000000000000000000000002",
             "name": "Admin User",
             "email": "admin@example.com",
             "role": "admin",
         },
         {
-            "id": "a100000000000000000000001",
+            "id": "c000000000000000000000001",
             "name": "Reviewer User",
             "email": "reviewer@example.com",
             "role": "reviewer",

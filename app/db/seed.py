@@ -10,7 +10,7 @@ def _seed_auth_user_rows() -> list[dict[str, Any]]:
 
     return [
         {
-            "id": "a100000000000000000000001",
+            "id": "c000000000000000000000001",
             "name": "Reviewer User",
             "email": "reviewer@example.com",
             "role": "reviewer",
@@ -21,7 +21,7 @@ def _seed_auth_user_rows() -> list[dict[str, Any]]:
             "created_at": created_at,
         },
         {
-            "id": "a100000000000000000000002",
+            "id": "c000000000000000000000002",
             "name": "Admin User",
             "email": "admin@example.com",
             "role": "admin",

@@ -1,6 +1,8 @@
 PRAGMA foreign_keys = OFF;
 
 DROP TABLE IF EXISTS reviews;
+DROP TABLE IF EXISTS auth_sessions;
+DROP TABLE IF EXISTS auth_users;
 DROP TABLE IF EXISTS submission_links;
 DROP TABLE IF EXISTS submission_videos;
 DROP TABLE IF EXISTS submission_images;
@@ -16,6 +18,25 @@ CREATE TABLE submitters (
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     tier TEXT NOT NULL CHECK (tier IN ('free', 'pro', 'verified'))
+);
+
+CREATE TABLE auth_users (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL CHECK (role IN ('admin', 'reviewer')),
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE auth_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES auth_users (id) ON DELETE CASCADE,
+    refresh_token_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    rotated_at TEXT,
+    revoked_at TEXT
 );
 
 CREATE TABLE submissions (

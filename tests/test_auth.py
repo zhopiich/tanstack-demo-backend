@@ -75,12 +75,29 @@ def test_me_returns_current_user(
 
     assert response.status_code == 200
     assert response.json()["data"]["email"] == "reviewer@example.com"
+    assert response.json()["data"]["role"] == "reviewer"
+
+
+def test_me_rejects_invalid_access_token(client: TestClient) -> None:
+    response = client.get(
+        "/api/auth/me",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
 
 
 def test_me_returns_admin_user(client: TestClient) -> None:
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "admin@example.com", "password": "password123"},
+    )
+    access_token = login.json()["accessToken"]
+
     response = client.get(
         "/api/auth/me",
-        headers={"Authorization": "Bearer dev-admin-token"},
+        headers={"Authorization": f"Bearer {access_token}"},
     )
 
     assert response.status_code == 200

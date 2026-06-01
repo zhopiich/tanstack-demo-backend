@@ -40,6 +40,11 @@ def test_create_app_keeps_existing_runtime_database(tmp_path) -> None:
     database_path = tmp_path / "runtime.db"
     first_app = create_app(database_path=database_path)
     with TestClient(first_app) as client:
+        login = client.post(
+            "/api/auth/login",
+            json={"email": "reviewer@example.com", "password": "password123"},
+        )
+        auth_headers = {"Authorization": f"Bearer {login.json()['accessToken']}"}
         response = client.post(
             "/api/submissions",
             json={
@@ -54,16 +59,21 @@ def test_create_app_keeps_existing_runtime_database(tmp_path) -> None:
                 },
                 "submitterEmail": "alex@example.com",
             },
-            headers={"Authorization": "Bearer dev-reviewer-token"},
+            headers=auth_headers,
         )
     assert response.status_code == 201
 
     second_app = create_app(database_path=database_path)
     with TestClient(second_app) as client:
+        login = client.post(
+            "/api/auth/login",
+            json={"email": "reviewer@example.com", "password": "password123"},
+        )
+        auth_headers = {"Authorization": f"Bearer {login.json()['accessToken']}"}
         listing = client.get(
             "/api/submissions",
             params={"search": "Persistent article"},
-            headers={"Authorization": "Bearer dev-reviewer-token"},
+            headers=auth_headers,
         )
 
     assert listing.status_code == 200

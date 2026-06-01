@@ -25,19 +25,11 @@ class AuthResult:
 
 
 class AuthService:
-    def __init__(
-        self,
-        repository: AuthRepository | None = None,
-        settings: Settings | None = None,
-    ) -> None:
+    def __init__(self, repository: AuthRepository, settings: Settings) -> None:
         self._repository = repository
         self._settings = settings
 
     def login(self, email: str, password: str) -> AuthResult | None:
-        # to be removed
-        if self._repository is None:
-            raise RuntimeError("Auth repository is required")
-
         user = self._repository.get_user_by_email(email)
         if user is None or not verify_password(password, user.password_hash):
             return None
@@ -45,10 +37,6 @@ class AuthService:
         return self._issue_auth_result(user)
 
     def _issue_auth_result(self, user: DomainAuthUser) -> AuthResult:
-        # to be removed
-        if self._settings is None:
-            raise RuntimeError("Auth settings are required")
-
         refresh_token = generate_refresh_token()
         now = datetime.now(UTC)
         self._repository.create_session(

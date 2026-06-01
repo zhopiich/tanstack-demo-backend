@@ -7,6 +7,11 @@ from app.core.tokens import create_access_token
 from app.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def fast_password_hash_iterations(monkeypatch) -> None:
+    monkeypatch.setenv("PASSWORD_HASH_ITERATIONS", "1")
+
+
 @pytest.fixture
 def client(tmp_path) -> Generator[TestClient]:
     app = create_app(database_path=tmp_path / "test.db")

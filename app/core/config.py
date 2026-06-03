@@ -18,6 +18,7 @@ class Settings:
     refresh_cookie_httponly: bool
     refresh_cookie_samesite: Literal["lax", "strict", "none"]
     refresh_cookie_secure: bool
+    cors_allow_origins: list[str]
 
     @classmethod
     def from_environment(cls, environ: Mapping[str, str] | None = None) -> Settings:
@@ -50,8 +51,13 @@ class Settings:
             refresh_cookie_samesite=refresh_cookie_samesite,
             refresh_cookie_secure=source.get("REFRESH_COOKIE_SECURE", "false").lower()
             == "true",
+            cors_allow_origins=_parse_csv(source.get("CORS_ALLOW_ORIGINS", "")),
         )
 
 
 def get_settings() -> Settings:
     return Settings.from_environment()
+
+
+def _parse_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]

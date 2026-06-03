@@ -37,6 +37,32 @@ def test_create_app_database_path_override_preserves_other_settings(
     assert app.state.settings.access_token_expires_seconds == 60
 
 
+def test_create_app_adds_cors_middleware_for_configured_origins(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv(
+        "CORS_ALLOW_ORIGINS",
+        "http://localhost,https://frontend.example.com",
+    )
+    app = create_app(database_path=tmp_path / "runtime.db")
+
+    with TestClient(app) as client:
+        response = client.options(
+            "/api/auth/refresh",
+            headers={
+                "Origin": "https://frontend.example.com",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "https://frontend.example.com"
+    )
+    assert response.headers["access-control-allow-credentials"] == "true"
+
+
 def test_create_app_keeps_existing_runtime_database(tmp_path) -> None:
     database_path = tmp_path / "runtime.db"
     first_app = create_app(database_path=database_path)

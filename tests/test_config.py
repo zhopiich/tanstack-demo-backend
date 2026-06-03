@@ -36,6 +36,7 @@ def test_settings_auth_defaults() -> None:
     assert settings.refresh_cookie_httponly is True
     assert settings.refresh_cookie_samesite == "lax"
     assert settings.refresh_cookie_secure is False
+    assert settings.cors_allow_origins == []
 
 
 def test_settings_reads_auth_environment() -> None:
@@ -51,6 +52,9 @@ def test_settings_reads_auth_environment() -> None:
             "REFRESH_COOKIE_HTTPONLY": "false",
             "REFRESH_COOKIE_SAMESITE": "strict",
             "REFRESH_COOKIE_SECURE": "true",
+            "CORS_ALLOW_ORIGINS": (
+                "http://localhost, https://tanstack-demo-frontend.example.com "
+            ),
         }
     )
 
@@ -64,6 +68,10 @@ def test_settings_reads_auth_environment() -> None:
     assert settings.refresh_cookie_httponly is False
     assert settings.refresh_cookie_samesite == "strict"
     assert settings.refresh_cookie_secure is True
+    assert settings.cors_allow_origins == [
+        "http://localhost",
+        "https://tanstack-demo-frontend.example.com",
+    ]
 
 
 def test_settings_rejects_invalid_refresh_cookie_samesite() -> None:

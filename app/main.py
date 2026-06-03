@@ -2,6 +2,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
@@ -21,6 +22,14 @@ def create_app(database_path: str | Path | None = None) -> FastAPI:
     app = FastAPI(title="Content API", version="1.0.0")
     app.state.settings = settings
     app.dependency_overrides[get_settings] = lambda: settings
+    if settings.cors_allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_allow_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     register_error_handlers(app)
     app.include_router(auth.router, prefix="/api")

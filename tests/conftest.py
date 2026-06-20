@@ -33,3 +33,19 @@ def auth_headers() -> dict[str, str]:
         expires_in_seconds=900,
     )
     return {"Authorization": f"Bearer {access_token}"}
+
+
+@pytest.fixture
+def admin_headers() -> dict[str, str]:
+    access_token = create_access_token(
+        claims={
+            "sub": "c000000000000000000000002",
+            "email": "admin@example.com",
+            "name": "Admin User",
+            "role": "admin",
+        },
+        secret_key="dev-secret-key-change-me",
+        algorithm="HS256",
+        expires_in_seconds=900,
+    )
+    return {"Authorization": f"Bearer {access_token}"}

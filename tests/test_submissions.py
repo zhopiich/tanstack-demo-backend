@@ -122,7 +122,7 @@ def test_get_submission_returns_404(
 
 def test_create_submission_persists_during_runtime(
     client: TestClient,
-    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
 ) -> None:
     payload = {
         "title": "New article",
@@ -137,7 +137,7 @@ def test_create_submission_persists_during_runtime(
         "submitterEmail": "alex@example.com",
     }
 
-    created = client.post("/api/submissions", json=payload, headers=auth_headers)
+    created = client.post("/api/submissions", json=payload, headers=admin_headers)
 
     assert created.status_code == 201
     created_body = created.json()["data"]
@@ -145,14 +145,14 @@ def test_create_submission_persists_during_runtime(
     assert created_body["content"]["type"] == "article"
     assert "type" not in created_body
 
-    fetched = client.get(f"/api/submissions/{created_body['id']}", headers=auth_headers)
+    fetched = client.get(f"/api/submissions/{created_body['id']}", headers=admin_headers)
     assert fetched.status_code == 200
     assert fetched.json()["data"]["id"] == created_body["id"]
 
 
 def test_create_submission_returns_404_for_unknown_submitter(
     client: TestClient,
-    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
 ) -> None:
     response = client.post(
         "/api/submissions",
@@ -168,7 +168,7 @@ def test_create_submission_returns_404_for_unknown_submitter(
             },
             "submitterEmail": "missing@example.com",
         },
-        headers=auth_headers,
+        headers=admin_headers,
     )
 
     assert response.status_code == 404
@@ -182,15 +182,15 @@ def test_create_submission_returns_404_for_unknown_submitter(
 
 def test_patch_submission_updates_title_tags_and_content(
     client: TestClient,
-    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
 ) -> None:
-    listing = client.get("/api/submissions", headers=auth_headers).json()
+    listing = client.get("/api/submissions", headers=admin_headers).json()
     submission_id = listing["data"][0]["id"]
 
     response = client.patch(
         f"/api/submissions/{submission_id}",
         json={"title": "Updated title", "tags": ["updated"]},
-        headers=auth_headers,
+        headers=admin_headers,
     )
 
     assert response.status_code == 200
@@ -223,13 +223,13 @@ def test_update_status_only_allows_pending_or_flagged(
 
 def test_delete_submission_removes_it(
     client: TestClient,
-    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
 ) -> None:
-    listing = client.get("/api/submissions", headers=auth_headers).json()
+    listing = client.get("/api/submissions", headers=admin_headers).json()
     submission_id = listing["data"][0]["id"]
 
-    deleted = client.delete(f"/api/submissions/{submission_id}", headers=auth_headers)
-    fetched = client.get(f"/api/submissions/{submission_id}", headers=auth_headers)
+    deleted = client.delete(f"/api/submissions/{submission_id}", headers=admin_headers)
+    fetched = client.get(f"/api/submissions/{submission_id}", headers=admin_headers)
 
     assert deleted.status_code == 204
     assert deleted.content == b""
@@ -291,20 +291,20 @@ def test_batch_review_is_all_or_nothing_when_an_id_is_missing(
 
 def test_batch_delete_removes_all_requested_submissions(
     client: TestClient,
-    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
 ) -> None:
-    listing = client.get("/api/submissions", headers=auth_headers).json()
+    listing = client.get("/api/submissions", headers=admin_headers).json()
     ids = [item["id"] for item in listing["data"][:2]]
 
     response = client.post(
         "/api/submissions/batch-delete",
         json={"ids": ids},
-        headers=auth_headers,
+        headers=admin_headers,
     )
 
     assert response.status_code == 200
     assert response.json() == {"deletedCount": 2}
 
     for submission_id in ids:
-        fetched = client.get(f"/api/submissions/{submission_id}", headers=auth_headers)
+        fetched = client.get(f"/api/submissions/{submission_id}", headers=admin_headers)
         assert fetched.status_code == 404

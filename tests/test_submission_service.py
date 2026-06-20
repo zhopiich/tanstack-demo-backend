@@ -3,7 +3,9 @@ from collections.abc import Iterator
 import pytest
 
 from app.core.errors import ApiError
-from app.db.session import connect_database, reset_database
+from app.db.migrate import run_migrations
+from app.db.seed import seed_database
+from app.db.session import connect_database
 from app.repositories.submission_repository import SubmissionRepository
 from app.schemas.auth import AuthUser
 from app.schemas.submission import BatchReviewBody, SubmissionCreateBody
@@ -13,9 +15,10 @@ from app.services.submission_service import SubmissionService
 @pytest.fixture
 def service(tmp_path) -> Iterator[SubmissionService]:
     database_path = tmp_path / "content.db"
-    reset_database(database_path)
     connection = connect_database(database_path)
     try:
+        run_migrations(connection)
+        seed_database(connection)
         yield SubmissionService(SubmissionRepository(connection))
     finally:
         connection.close()

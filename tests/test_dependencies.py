@@ -1,13 +1,23 @@
 import pytest
 
 from app.core.config import Settings
-from app.db.session import connect_database, reset_database
+from app.db.migrate import run_migrations
+from app.db.seed import seed_database
+from app.db.session import connect_database
 from app.dependencies import get_database_connection
+
+
+def _prepare_db(database_path) -> None:
+    connection = connect_database(database_path)
+    run_migrations(connection)
+    seed_database(connection)
+    connection.commit()
+    connection.close()
 
 
 def test_database_dependency_commits_successful_request(tmp_path) -> None:
     database_path = tmp_path / "content.db"
-    reset_database(database_path)
+    _prepare_db(database_path)
     settings = Settings.from_environment({"DATABASE_PATH": str(database_path)})
     dependency = get_database_connection(settings)
     connection = next(dependency)
@@ -34,7 +44,7 @@ def test_database_dependency_commits_successful_request(tmp_path) -> None:
 
 def test_database_dependency_rolls_back_failed_request(tmp_path) -> None:
     database_path = tmp_path / "content.db"
-    reset_database(database_path)
+    _prepare_db(database_path)
     settings = Settings.from_environment({"DATABASE_PATH": str(database_path)})
     dependency = get_database_connection(settings)
     connection = next(dependency)
@@ -61,7 +71,7 @@ def test_database_dependency_rolls_back_failed_request(tmp_path) -> None:
 
 def test_database_dependency_closes_connection(tmp_path) -> None:
     database_path = tmp_path / "content.db"
-    reset_database(database_path)
+    _prepare_db(database_path)
     settings = Settings.from_environment({"DATABASE_PATH": str(database_path)})
     dependency = get_database_connection(settings)
     connection = next(dependency)

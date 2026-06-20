@@ -101,10 +101,10 @@ def test_create_app_keeps_existing_runtime_database(tmp_path) -> None:
 def _auth_headers() -> dict[str, str]:
     access_token = create_access_token(
         claims={
-            "sub": "c000000000000000000000001",
-            "email": "reviewer@example.com",
-            "name": "Reviewer User",
-            "role": "reviewer",
+            "sub": "c000000000000000000000002",
+            "email": "admin@example.com",
+            "name": "Admin User",
+            "role": "admin",
         },
         secret_key="dev-secret-key-change-me",
         algorithm="HS256",

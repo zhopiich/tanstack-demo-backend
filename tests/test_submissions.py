@@ -202,20 +202,20 @@ def test_patch_submission_updates_title_tags_and_content(
 
 def test_update_status_only_allows_pending_or_flagged(
     client: TestClient,
-    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
 ) -> None:
-    listing = client.get("/api/submissions", headers=auth_headers).json()
+    listing = client.get("/api/submissions", headers=admin_headers).json()
     submission_id = listing["data"][0]["id"]
 
     flagged = client.patch(
         f"/api/submissions/{submission_id}/status",
         json={"status": "flagged"},
-        headers=auth_headers,
+        headers=admin_headers,
     )
     rejected = client.patch(
         f"/api/submissions/{submission_id}/status",
         json={"status": "approved"},
-        headers=auth_headers,
+        headers=admin_headers,
     )
 
     assert flagged.status_code == 200
@@ -419,11 +419,12 @@ def test_batch_review_allowed_for_reviewer(
     assert response.json() == {"updatedCount": 2}
 
 
-def test_update_status_allowed_for_reviewer(
+def test_update_status_forbidden_for_reviewer(
     client: TestClient,
     auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
 ) -> None:
-    listing = client.get("/api/submissions", headers=auth_headers).json()
+    listing = client.get("/api/submissions", headers=admin_headers).json()
     submission_id = listing["data"][0]["id"]
 
     response = client.patch(
@@ -432,5 +433,7 @@ def test_update_status_allowed_for_reviewer(
         headers=auth_headers,
     )
 
-    assert response.status_code == 200
-    assert response.json()["data"]["status"] == "flagged"
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {"code": "forbidden", "message": "Insufficient permissions"},
+    }

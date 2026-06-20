@@ -118,7 +118,7 @@ def delete_submission(
 def update_submission_status(
     id: Annotated[SubmissionId, Path()],
     body: SubmissionStatusUpdateBody,
-    _: Annotated[AuthUser, Depends(require_current_user)],
+    _: Annotated[AuthUser, Depends(require_admin)],
     service: Annotated[SubmissionService, Depends(get_submission_service)],
 ) -> SubmissionResponse:
     return SubmissionResponse(data=service.update_status(id, body))

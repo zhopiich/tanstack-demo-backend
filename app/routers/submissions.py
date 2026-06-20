@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Path, Query, Response
 
-from app.core.security import require_current_user
+from app.core.security import require_admin, require_current_user
 from app.dependencies import get_submission_service
 from app.schemas.auth import AuthUser
 from app.schemas.submission import (
@@ -61,7 +61,7 @@ def list_submissions(
 @router.post("", status_code=201, response_model=SubmissionResponse)
 def create_submission(
     body: SubmissionCreateBody,
-    _: Annotated[AuthUser, Depends(require_current_user)],
+    _: Annotated[AuthUser, Depends(require_admin)],
     service: Annotated[SubmissionService, Depends(get_submission_service)],
 ) -> SubmissionResponse:
     return SubmissionResponse(data=service.create_submission(body))
@@ -79,7 +79,7 @@ def batch_review_submissions(
 @router.post("/batch-delete", response_model=DeletedCountResponse)
 def batch_delete_submissions(
     body: BatchDeleteBody,
-    _: Annotated[AuthUser, Depends(require_current_user)],
+    _: Annotated[AuthUser, Depends(require_admin)],
     service: Annotated[SubmissionService, Depends(get_submission_service)],
 ) -> DeletedCountResponse:
     return service.batch_delete(body)
@@ -98,7 +98,7 @@ def get_submission(
 def update_submission(
     id: Annotated[SubmissionId, Path()],
     body: SubmissionUpdateBody,
-    _: Annotated[AuthUser, Depends(require_current_user)],
+    _: Annotated[AuthUser, Depends(require_admin)],
     service: Annotated[SubmissionService, Depends(get_submission_service)],
 ) -> SubmissionResponse:
     return SubmissionResponse(data=service.update_submission(id, body))
@@ -107,7 +107,7 @@ def update_submission(
 @router.delete("/{id}", status_code=204)
 def delete_submission(
     id: Annotated[SubmissionId, Path()],
-    _: Annotated[AuthUser, Depends(require_current_user)],
+    _: Annotated[AuthUser, Depends(require_admin)],
     service: Annotated[SubmissionService, Depends(get_submission_service)],
 ) -> Response:
     service.delete_submission(id)

@@ -147,11 +147,14 @@ def run_migrations(
 
     applied_count = 0
     stamped_count = 0
+    applied_versions: set[int] = set()
 
     if schema_migrations_exists:
-        _verify_applied_hashes(connection, available)
         applied_versions = _get_applied_versions(connection)
-    else:
+        if applied_versions:
+            _verify_applied_hashes(connection, available)
+
+    if not applied_versions:
         connection.execute(_SCHEMA_MIGRATIONS_SQL)
         if has_user_tables:
             first = available[0]
@@ -170,8 +173,6 @@ def run_migrations(
             _record_applied(connection, first)
             stamped_count += 1
             applied_versions = {first.version}
-        else:
-            applied_versions = set()
 
     highest_applied = max(applied_versions) if applied_versions else 0
 

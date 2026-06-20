@@ -188,15 +188,12 @@ class SubmissionService:
 
     def _submissions_by_ids(self, ids: list[str]) -> list[domain.Submission]:
         unique_ids = list(dict.fromkeys(ids))
-        submissions = [
-            self._repository.get_submission(submission_id)
-            for submission_id in unique_ids
-        ]
+        submissions = self._repository.find_submissions_by_ids(unique_ids)
 
-        if any(submission is None for submission in submissions):
+        if len(submissions) != len(unique_ids):
             raise ApiError(404, "submission_not_found", "Submission not found")
 
-        return [submission for submission in submissions if submission is not None]
+        return submissions
 
     def _generate_submission_id(self) -> str:
         existing_values = [

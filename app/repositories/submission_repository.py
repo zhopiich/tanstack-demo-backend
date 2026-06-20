@@ -43,7 +43,7 @@ class SubmissionRepository:
             """
         ).fetchall()
 
-        return [self._to_submission(row) for row in rows]
+        return self._load_submission_list(rows)
 
     def find_submissions(
         self,
@@ -64,7 +64,7 @@ class SubmissionRepository:
             search=search,
         )
         total = self._count_submissions(where_sql, params)
-        rows = self._find_submission_rows(
+        submissions = self._find_submission_rows(
             where_sql=where_sql,
             params=params,
             sort_by=sort_by,
@@ -74,13 +74,21 @@ class SubmissionRepository:
         )
 
         return SubmissionListResult(
-            data=[self._to_submission(row) for row in rows],
+            data=submissions,
             total=total,
         )
 
     def get_submission(self, submission_id: str) -> domain.Submission | None:
-        row = self._connection.execute(
-            """
+        results = self.find_submissions_by_ids([submission_id])
+        return results[0] if results else None
+
+    def find_submissions_by_ids(self, ids: list[str]) -> list[domain.Submission]:
+        unique_ids = list(dict.fromkeys(ids))
+        if not unique_ids:
+            return []
+        placeholders = ",".join("?" * len(unique_ids))
+        rows = self._connection.execute(
+            f"""
             SELECT
                 submissions.id,
                 submissions.title,
@@ -98,13 +106,11 @@ class SubmissionRepository:
                 submitters.tier AS submitter_tier
             FROM submissions
             JOIN submitters ON submitters.id = submissions.submitter_id
-            WHERE submissions.id = ?
+            WHERE submissions.id IN ({placeholders})
             """,
-            (submission_id,),
-        ).fetchone()
-        if row is None:
-            return None
-        return self._to_submission(row)
+            unique_ids,
+        ).fetchall()
+        return self._load_submission_list(rows)
 
     def get_submitter_by_email(self, email: str) -> domain.Submitter | None:
         row = self._connection.execute(
@@ -244,12 +250,12 @@ class SubmissionRepository:
         sort_order: SortOrder,
         limit: int,
         offset: int,
-    ) -> list[sqlite3.Row]:
+    ) -> list[domain.Submission]:
         query_params = params | {"limit": limit, "offset": offset}
         order_direction = "ASC" if sort_order == "asc" else "DESC"
         order_column = self._sort_column(sort_by)
 
-        return self._connection.execute(
+        rows = self._connection.execute(
             f"""
             SELECT
                 submissions.id,
@@ -275,6 +281,8 @@ class SubmissionRepository:
             """,
             query_params,
         ).fetchall()
+
+        return self._load_submission_list(rows)
 
     def _sort_column(self, sort_by: SortBy) -> str:
         return {
@@ -555,6 +563,50 @@ class SubmissionRepository:
             reviewed_at=datetime.fromisoformat(row["reviewed_at"]),
         )
 
+    def _tags_for_ids(self, ids: list[str]) -> dict[str, list[str]]:
+        result: dict[str, list[str]] = {sid: [] for sid in ids}
+        if not ids:
+            return result
+        placeholders = ",".join("?" * len(ids))
+        rows = self._connection.execute(
+            f"""
+            SELECT submission_id, tag
+            FROM submission_tags
+            WHERE submission_id IN ({placeholders})
+            ORDER BY submission_id, position
+            """,
+            ids,
+        ).fetchall()
+        for row in rows:
+            result[row["submission_id"]].append(row["tag"])
+        return result
+
+    def _review_for_ids(self, ids: list[str]) -> dict[str, domain.Review | None]:
+        result: dict[str, domain.Review | None] = {sid: None for sid in ids}
+        if not ids:
+            return result
+        placeholders = ",".join("?" * len(ids))
+        rows = self._connection.execute(
+            f"""
+            SELECT submission_id, reviewer_name, reviewer_email,
+                   verdict, reason, reviewed_at
+            FROM reviews
+            WHERE submission_id IN ({placeholders})
+            """,
+            ids,
+        ).fetchall()
+        for row in rows:
+            result[row["submission_id"]] = domain.Review(
+                reviewer=domain.Reviewer(
+                    name=row["reviewer_name"],
+                    email=row["reviewer_email"],
+                ),
+                verdict=domain.ReviewVerdict(row["verdict"]),
+                reason=row["reason"],
+                reviewed_at=datetime.fromisoformat(row["reviewed_at"]),
+            )
+        return result
+
     def _get_content(
         self,
         *,
@@ -624,4 +676,136 @@ class SubmissionRepository:
             thumbnail_url=thumbnail_url,
             domain=row["domain"],
             is_behind_paywall=bool(row["is_behind_paywall"]),
+        )
+
+    def _content_for_ids(self, rows: list[sqlite3.Row]) -> dict[str, domain.Content]:
+        result: dict[str, domain.Content] = {}
+        if not rows:
+            return result
+
+        row_by_id: dict[str, sqlite3.Row] = {row["id"]: row for row in rows}
+
+        by_type: dict[str, list[str]] = {}
+        for row in rows:
+            by_type.setdefault(row["content_type"], []).append(row["id"])
+
+        if "article" in by_type:
+            ids = by_type["article"]
+            placeholders = ",".join("?" * len(ids))
+            q_rows = self._connection.execute(
+                f"""
+                SELECT submission_id, word_count, reading_time
+                FROM submission_articles
+                WHERE submission_id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+            for r in q_rows:
+                mr = row_by_id[r["submission_id"]]
+                result[r["submission_id"]] = domain.ArticleContent(
+                    url=mr["content_url"],
+                    thumbnail_url=mr["thumbnail_url"],
+                    word_count=r["word_count"],
+                    reading_time=r["reading_time"],
+                )
+
+        if "image" in by_type:
+            ids = by_type["image"]
+            placeholders = ",".join("?" * len(ids))
+            q_rows = self._connection.execute(
+                f"""
+                SELECT submission_id, width, height
+                FROM submission_images
+                WHERE submission_id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+            for r in q_rows:
+                mr = row_by_id[r["submission_id"]]
+                result[r["submission_id"]] = domain.ImageContent(
+                    url=mr["content_url"],
+                    thumbnail_url=mr["thumbnail_url"],
+                    width=r["width"],
+                    height=r["height"],
+                )
+
+        if "video" in by_type:
+            ids = by_type["video"]
+            placeholders = ",".join("?" * len(ids))
+            q_rows = self._connection.execute(
+                f"""
+                SELECT submission_id, duration, resolution
+                FROM submission_videos
+                WHERE submission_id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+            for r in q_rows:
+                mr = row_by_id[r["submission_id"]]
+                result[r["submission_id"]] = domain.VideoContent(
+                    url=mr["content_url"],
+                    thumbnail_url=mr["thumbnail_url"],
+                    duration=r["duration"],
+                    resolution=domain.VideoResolution(r["resolution"]),
+                )
+
+        if "link" in by_type:
+            ids = by_type["link"]
+            placeholders = ",".join("?" * len(ids))
+            q_rows = self._connection.execute(
+                f"""
+                SELECT submission_id, domain, is_behind_paywall
+                FROM submission_links
+                WHERE submission_id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+            for r in q_rows:
+                mr = row_by_id[r["submission_id"]]
+                result[r["submission_id"]] = domain.LinkContent(
+                    url=mr["content_url"],
+                    thumbnail_url=mr["thumbnail_url"],
+                    domain=r["domain"],
+                    is_behind_paywall=bool(r["is_behind_paywall"]),
+                )
+
+        return result
+
+    def _load_submission_list(self, rows: list[sqlite3.Row]) -> list[domain.Submission]:
+        if not rows:
+            return []
+        ids = [row["id"] for row in rows]
+        tags_map = self._tags_for_ids(ids)
+        content_map = self._content_for_ids(rows)
+        review_map = self._review_for_ids(ids)
+        return [
+            self._build_submission(row, tags_map, content_map, review_map)
+            for row in rows
+        ]
+
+    def _build_submission(
+        self,
+        row: sqlite3.Row,
+        tags_map: dict[str, list[str]],
+        content_map: dict[str, domain.Content],
+        review_map: dict[str, domain.Review | None],
+    ) -> domain.Submission:
+        submission_id = row["id"]
+        return domain.Submission(
+            id=submission_id,
+            title=row["title"],
+            status=domain.SubmissionStatus(row["status"]),
+            submitter=domain.Submitter(
+                id=row["submitter_id"],
+                name=row["submitter_name"],
+                email=row["submitter_email"],
+                tier=domain.SubmitterTier(row["submitter_tier"]),
+            ),
+            content=content_map[submission_id],
+            tags=tags_map.get(submission_id, []),
+            review=review_map.get(submission_id),
+            score=row["score"],
+            flag_count=row["flag_count"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
         )

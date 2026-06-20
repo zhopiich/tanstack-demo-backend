@@ -145,7 +145,9 @@ def test_create_submission_persists_during_runtime(
     assert created_body["content"]["type"] == "article"
     assert "type" not in created_body
 
-    fetched = client.get(f"/api/submissions/{created_body['id']}", headers=admin_headers)
+    fetched = client.get(
+        f"/api/submissions/{created_body['id']}", headers=admin_headers
+    )
     assert fetched.status_code == 200
     assert fetched.json()["data"]["id"] == created_body["id"]
 

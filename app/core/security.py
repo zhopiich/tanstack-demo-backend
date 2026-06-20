@@ -32,3 +32,11 @@ def require_current_user(
         )
     except InvalidTokenError, KeyError, ValueError:
         raise ApiError(401, "unauthorized", "Invalid bearer token") from None
+
+
+def require_admin(
+    current_user: Annotated[AuthUser, Depends(require_current_user)],
+) -> AuthUser:
+    if current_user.role != "admin":
+        raise ApiError(403, "forbidden", "Insufficient permissions")
+    return current_user

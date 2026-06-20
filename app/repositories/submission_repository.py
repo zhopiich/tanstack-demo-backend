@@ -43,7 +43,7 @@ class SubmissionRepository:
             """
         ).fetchall()
 
-        return [self._to_submission(row) for row in rows]
+        return self._load_submission_list(rows)
 
     def find_submissions(
         self,
@@ -64,7 +64,7 @@ class SubmissionRepository:
             search=search,
         )
         total = self._count_submissions(where_sql, params)
-        rows = self._find_submission_rows(
+        submissions = self._find_submission_rows(
             where_sql=where_sql,
             params=params,
             sort_by=sort_by,
@@ -74,7 +74,7 @@ class SubmissionRepository:
         )
 
         return SubmissionListResult(
-            data=[self._to_submission(row) for row in rows],
+            data=submissions,
             total=total,
         )
 
@@ -244,12 +244,12 @@ class SubmissionRepository:
         sort_order: SortOrder,
         limit: int,
         offset: int,
-    ) -> list[sqlite3.Row]:
+    ) -> list[domain.Submission]:
         query_params = params | {"limit": limit, "offset": offset}
         order_direction = "ASC" if sort_order == "asc" else "DESC"
         order_column = self._sort_column(sort_by)
 
-        return self._connection.execute(
+        rows = self._connection.execute(
             f"""
             SELECT
                 submissions.id,
@@ -275,6 +275,8 @@ class SubmissionRepository:
             """,
             query_params,
         ).fetchall()
+
+        return self._load_submission_list(rows)
 
     def _sort_column(self, sort_by: SortBy) -> str:
         return {
@@ -766,3 +768,44 @@ class SubmissionRepository:
                 )
 
         return result
+
+    def _load_submission_list(
+        self, rows: list[sqlite3.Row]
+    ) -> list[domain.Submission]:
+        if not rows:
+            return []
+        ids = [row["id"] for row in rows]
+        tags_map = self._tags_for_ids(ids)
+        content_map = self._content_for_ids(rows)
+        review_map = self._review_for_ids(ids)
+        return [
+            self._build_submission(row, tags_map, content_map, review_map)
+            for row in rows
+        ]
+
+    def _build_submission(
+        self,
+        row: sqlite3.Row,
+        tags_map: dict[str, list[str]],
+        content_map: dict[str, domain.Content],
+        review_map: dict[str, domain.Review | None],
+    ) -> domain.Submission:
+        submission_id = row["id"]
+        return domain.Submission(
+            id=submission_id,
+            title=row["title"],
+            status=domain.SubmissionStatus(row["status"]),
+            submitter=domain.Submitter(
+                id=row["submitter_id"],
+                name=row["submitter_name"],
+                email=row["submitter_email"],
+                tier=domain.SubmitterTier(row["submitter_tier"]),
+            ),
+            content=content_map[submission_id],
+            tags=tags_map.get(submission_id, []),
+            review=review_map.get(submission_id),
+            score=row["score"],
+            flag_count=row["flag_count"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )

@@ -671,3 +671,98 @@ class SubmissionRepository:
             domain=row["domain"],
             is_behind_paywall=bool(row["is_behind_paywall"]),
         )
+
+    def _content_for_ids(
+        self, rows: list[sqlite3.Row]
+    ) -> dict[str, domain.Content]:
+        result: dict[str, domain.Content] = {}
+        if not rows:
+            return result
+
+        row_by_id: dict[str, sqlite3.Row] = {row["id"]: row for row in rows}
+
+        by_type: dict[str, list[str]] = {}
+        for row in rows:
+            by_type.setdefault(row["content_type"], []).append(row["id"])
+
+        if "article" in by_type:
+            ids = by_type["article"]
+            placeholders = ",".join("?" * len(ids))
+            q_rows = self._connection.execute(
+                f"""
+                SELECT submission_id, word_count, reading_time
+                FROM submission_articles
+                WHERE submission_id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+            for r in q_rows:
+                mr = row_by_id[r["submission_id"]]
+                result[r["submission_id"]] = domain.ArticleContent(
+                    url=mr["content_url"],
+                    thumbnail_url=mr["thumbnail_url"],
+                    word_count=r["word_count"],
+                    reading_time=r["reading_time"],
+                )
+
+        if "image" in by_type:
+            ids = by_type["image"]
+            placeholders = ",".join("?" * len(ids))
+            q_rows = self._connection.execute(
+                f"""
+                SELECT submission_id, width, height
+                FROM submission_images
+                WHERE submission_id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+            for r in q_rows:
+                mr = row_by_id[r["submission_id"]]
+                result[r["submission_id"]] = domain.ImageContent(
+                    url=mr["content_url"],
+                    thumbnail_url=mr["thumbnail_url"],
+                    width=r["width"],
+                    height=r["height"],
+                )
+
+        if "video" in by_type:
+            ids = by_type["video"]
+            placeholders = ",".join("?" * len(ids))
+            q_rows = self._connection.execute(
+                f"""
+                SELECT submission_id, duration, resolution
+                FROM submission_videos
+                WHERE submission_id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+            for r in q_rows:
+                mr = row_by_id[r["submission_id"]]
+                result[r["submission_id"]] = domain.VideoContent(
+                    url=mr["content_url"],
+                    thumbnail_url=mr["thumbnail_url"],
+                    duration=r["duration"],
+                    resolution=domain.VideoResolution(r["resolution"]),
+                )
+
+        if "link" in by_type:
+            ids = by_type["link"]
+            placeholders = ",".join("?" * len(ids))
+            q_rows = self._connection.execute(
+                f"""
+                SELECT submission_id, domain, is_behind_paywall
+                FROM submission_links
+                WHERE submission_id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+            for r in q_rows:
+                mr = row_by_id[r["submission_id"]]
+                result[r["submission_id"]] = domain.LinkContent(
+                    url=mr["content_url"],
+                    thumbnail_url=mr["thumbnail_url"],
+                    domain=r["domain"],
+                    is_behind_paywall=bool(r["is_behind_paywall"]),
+                )
+
+        return result

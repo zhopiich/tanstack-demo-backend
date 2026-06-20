@@ -308,3 +308,89 @@ def test_batch_delete_removes_all_requested_submissions(
     for submission_id in ids:
         fetched = client.get(f"/api/submissions/{submission_id}", headers=admin_headers)
         assert fetched.status_code == 404
+
+
+def test_create_submission_forbidden_for_reviewer(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    response = client.post(
+        "/api/submissions",
+        json={
+            "title": "Reviewer attempt",
+            "tags": ["test"],
+            "content": {
+                "type": "article",
+                "url": "https://example.com/test",
+                "thumbnailUrl": None,
+                "wordCount": 100,
+                "readingTime": 1,
+            },
+            "submitterEmail": "alex@example.com",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {"code": "forbidden", "message": "Insufficient permissions"},
+    }
+
+
+def test_update_submission_forbidden_for_reviewer(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
+) -> None:
+    listing = client.get("/api/submissions", headers=admin_headers).json()
+    submission_id = listing["data"][0]["id"]
+
+    response = client.patch(
+        f"/api/submissions/{submission_id}",
+        json={"title": "Reviewer attempt"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {"code": "forbidden", "message": "Insufficient permissions"},
+    }
+
+
+def test_delete_submission_forbidden_for_reviewer(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
+) -> None:
+    listing = client.get("/api/submissions", headers=admin_headers).json()
+    submission_id = listing["data"][0]["id"]
+
+    response = client.delete(
+        f"/api/submissions/{submission_id}",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {"code": "forbidden", "message": "Insufficient permissions"},
+    }
+
+
+def test_batch_delete_forbidden_for_reviewer(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
+) -> None:
+    listing = client.get("/api/submissions", headers=admin_headers).json()
+    ids = [item["id"] for item in listing["data"][:2]]
+
+    response = client.post(
+        "/api/submissions/batch-delete",
+        json={"ids": ids},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {"code": "forbidden", "message": "Insufficient permissions"},
+    }

@@ -1,7 +1,7 @@
 import sqlite3
-from importlib.resources import files
 from pathlib import Path
 
+from app.db.migrate import run_migrations
 from app.db.seed import seed_database
 
 
@@ -14,22 +14,20 @@ def connect_database(database_path: str | Path) -> sqlite3.Connection:
 
 def initialize_runtime_database(database_path: str | Path) -> None:
     path = Path(database_path)
-    if path.exists():
-        return
-
-    reset_database(path)
-
-
-def reset_database(database_path: str | Path) -> None:
-    path = Path(database_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     connection = connect_database(path)
-    connection.executescript(_read_schema())
-    seed_database(connection)
-    connection.commit()
-    connection.close()
+    try:
+        run_migrations(connection)
+        # Production should set ENV=production on Railway if you want
+        # to avoid the idempotency check.
 
-
-def _read_schema() -> str:
-    return files("app.db").joinpath("schema.sql").read_text()
+        # env = os.getenv("ENV", "development")
+        # if env in ("development", "test"):
+        seed_database(connection)
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()

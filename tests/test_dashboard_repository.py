@@ -2,16 +2,19 @@ from collections.abc import Iterator
 
 import pytest
 
-from app.db.session import connect_database, reset_database
+from app.db.migrate import run_migrations
+from app.db.seed import seed_database
+from app.db.session import connect_database
 from app.repositories.dashboard_repository import DashboardRepository
 
 
 @pytest.fixture
 def repository(tmp_path) -> Iterator[DashboardRepository]:
     database_path = tmp_path / "content.db"
-    reset_database(database_path)
     connection = connect_database(database_path)
     try:
+        run_migrations(connection)
+        seed_database(connection)
         yield DashboardRepository(connection)
     finally:
         connection.close()

@@ -1,6 +1,8 @@
 from app.core.config import Settings
 from app.core.tokens import decode_access_token
-from app.db.session import connect_database, reset_database
+from app.db.migrate import run_migrations
+from app.db.seed import seed_database
+from app.db.session import connect_database
 from app.repositories.auth_repository import AuthRepository
 from app.services.auth_service import AuthService
 
@@ -119,8 +121,9 @@ def test_logout_is_idempotent_for_missing_or_invalid_token(tmp_path) -> None:
 
 def _service(tmp_path):
     database_path = tmp_path / "content.db"
-    reset_database(database_path)
     connection = connect_database(database_path)
+    run_migrations(connection)
+    seed_database(connection)
     settings = Settings.from_environment(
         {
             "DATABASE_PATH": database_path.as_posix(),

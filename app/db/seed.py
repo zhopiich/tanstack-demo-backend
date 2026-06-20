@@ -138,6 +138,12 @@ def _seed_submission_rows() -> list[dict[str, Any]]:
 
 
 def seed_database(connection: sqlite3.Connection) -> None:
+    existing = connection.execute(
+        "SELECT COUNT(*) AS count FROM auth_users"
+    ).fetchone()["count"]
+    if existing > 0:
+        return
+
     connection.executemany(
         """
         INSERT INTO auth_users (id, name, email, role, password_hash, created_at)

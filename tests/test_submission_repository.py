@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.db.session import connect_database, reset_database
+from app.db.migrate import run_migrations
+from app.db.seed import seed_database
+from app.db.session import connect_database
 from app.domain.submission import (
     ArticleContent,
     ImageContent,
@@ -26,9 +28,10 @@ from app.repositories.submission_repository import SubmissionRepository
 @pytest.fixture
 def repository(tmp_path) -> Iterator[SubmissionRepository]:
     database_path = tmp_path / "content.db"
-    reset_database(database_path)
     connection = connect_database(database_path)
     try:
+        run_migrations(connection)
+        seed_database(connection)
         yield SubmissionRepository(connection)
     finally:
         connection.close()

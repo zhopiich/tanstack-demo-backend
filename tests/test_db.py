@@ -2,13 +2,13 @@ import sqlite3
 import threading
 
 from app.core.passwords import verify_password
-from app.db.session import connect_database, initialize_runtime_database, reset_database
+from app.db.session import connect_database, initialize_runtime_database
 
 
-def test_reset_database_creates_schema_and_seed_data(tmp_path) -> None:
+def test_initialize_runtime_database_creates_schema_and_seed_data(tmp_path) -> None:
     database_path = tmp_path / "content.db"
 
-    reset_database(database_path)
+    initialize_runtime_database(database_path)
 
     connection = connect_database(database_path)
     tables = {
@@ -18,6 +18,7 @@ def test_reset_database_creates_schema_and_seed_data(tmp_path) -> None:
         ).fetchall()
     }
 
+    assert "schema_migrations" in tables
     assert {
         "submitters",
         "submissions",
@@ -84,36 +85,12 @@ def test_reset_database_creates_schema_and_seed_data(tmp_path) -> None:
     connection.close()
 
 
-def test_reset_database_rebuilds_existing_database(tmp_path) -> None:
-    database_path = tmp_path / "content.db"
-    reset_database(database_path)
-    connection = connect_database(database_path)
-    connection.execute(
-        """
-        INSERT INTO submitters (id, name, email, tier)
-        VALUES ('c999999999999999999999999', 'Temp User', 'temp@example.com', 'free')
-        """
-    )
-    connection.commit()
-    connection.close()
-
-    reset_database(database_path)
-    rebuilt_connection = connect_database(database_path)
-
-    assert _count(rebuilt_connection, "submitters") == 3
-    assert (
-        rebuilt_connection.execute(
-            "SELECT COUNT(*) AS count FROM submitters WHERE email = 'temp@example.com'"
-        ).fetchone()["count"]
-        == 0
-    )
-    rebuilt_connection.close()
-
-
-def test_reset_database_creates_auth_tables_and_seed_users(tmp_path) -> None:
+def test_initialize_runtime_database_creates_auth_tables_and_seed_users(
+    tmp_path,
+) -> None:
     database_path = tmp_path / "content.db"
 
-    reset_database(database_path)
+    initialize_runtime_database(database_path)
 
     connection = connect_database(database_path)
     tables = {
@@ -174,7 +151,7 @@ def test_initialize_runtime_database_creates_database_when_missing(tmp_path) -> 
     connection.close()
 
 
-def test_initialize_runtime_database_keeps_existing_database(tmp_path) -> None:
+def test_initialize_runtime_database_is_idempotent_with_seed(tmp_path) -> None:
     database_path = tmp_path / "runtime.db"
     initialize_runtime_database(database_path)
     connection = connect_database(database_path)
@@ -199,9 +176,24 @@ def test_initialize_runtime_database_keeps_existing_database(tmp_path) -> None:
     existing_connection.close()
 
 
+def test_initialize_runtime_database_records_schema_migrations(tmp_path) -> None:
+    database_path = tmp_path / "runtime.db"
+
+    initialize_runtime_database(database_path)
+
+    connection = connect_database(database_path)
+    rows = connection.execute(
+        "SELECT version, filename FROM schema_migrations ORDER BY version"
+    ).fetchall()
+    assert len(rows) >= 1
+    assert rows[0]["version"] == 1
+    assert rows[0]["filename"] == "001_initial.sql"
+    connection.close()
+
+
 def test_connect_database_uses_default_sqlite_thread_check(tmp_path) -> None:
     database_path = tmp_path / "content.db"
-    reset_database(database_path)
+    initialize_runtime_database(database_path)
     connection = connect_database(database_path)
     errors: list[BaseException] = []
 

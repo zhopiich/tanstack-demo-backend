@@ -2,7 +2,9 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 
 from app.core.tokens import hash_refresh_token
-from app.db.session import connect_database, reset_database
+from app.db.migrate import run_migrations
+from app.db.seed import seed_database
+from app.db.session import connect_database
 from app.domain.auth import AuthRole
 from app.repositories.auth_repository import AuthRepository
 
@@ -79,6 +81,7 @@ def test_create_find_rotate_and_revoke_session(tmp_path) -> None:
 
 def _repository(tmp_path) -> tuple[AuthRepository, sqlite3.Connection]:
     database_path = tmp_path / "content.db"
-    reset_database(database_path)
     connection = connect_database(database_path)
+    run_migrations(connection)
+    seed_database(connection)
     return AuthRepository(connection), connection

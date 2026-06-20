@@ -79,8 +79,18 @@ class SubmissionRepository:
         )
 
     def get_submission(self, submission_id: str) -> domain.Submission | None:
-        row = self._connection.execute(
-            """
+        results = self.find_submissions_by_ids([submission_id])
+        return results[0] if results else None
+
+    def find_submissions_by_ids(
+        self, ids: list[str]
+    ) -> list[domain.Submission]:
+        unique_ids = list(dict.fromkeys(ids))
+        if not unique_ids:
+            return []
+        placeholders = ",".join("?" * len(unique_ids))
+        rows = self._connection.execute(
+            f"""
             SELECT
                 submissions.id,
                 submissions.title,
@@ -98,13 +108,11 @@ class SubmissionRepository:
                 submitters.tier AS submitter_tier
             FROM submissions
             JOIN submitters ON submitters.id = submissions.submitter_id
-            WHERE submissions.id = ?
+            WHERE submissions.id IN ({placeholders})
             """,
-            (submission_id,),
-        ).fetchone()
-        if row is None:
-            return None
-        return self._to_submission(row)
+            unique_ids,
+        ).fetchall()
+        return self._load_submission_list(rows)
 
     def get_submitter_by_email(self, email: str) -> domain.Submitter | None:
         row = self._connection.execute(

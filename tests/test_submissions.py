@@ -394,3 +394,41 @@ def test_batch_delete_forbidden_for_reviewer(
     assert response.json() == {
         "error": {"code": "forbidden", "message": "Insufficient permissions"},
     }
+
+
+def test_batch_review_allowed_for_reviewer(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    listing = client.get("/api/submissions", headers=auth_headers).json()
+    ids = [item["id"] for item in listing["data"][:2]]
+
+    response = client.post(
+        "/api/submissions/batch-review",
+        json={
+            "ids": ids,
+            "verdict": "rejected",
+            "reason": "Reviewer can review",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"updatedCount": 2}
+
+
+def test_update_status_allowed_for_reviewer(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    listing = client.get("/api/submissions", headers=auth_headers).json()
+    submission_id = listing["data"][0]["id"]
+
+    response = client.patch(
+        f"/api/submissions/{submission_id}/status",
+        json={"status": "flagged"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "flagged"

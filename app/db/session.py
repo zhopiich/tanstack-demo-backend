@@ -1,4 +1,3 @@
-import os
 import sqlite3
 from pathlib import Path
 
@@ -20,9 +19,12 @@ def initialize_runtime_database(database_path: str | Path) -> None:
     connection = connect_database(path)
     try:
         run_migrations(connection)
-        env = os.getenv("ENV", "development")
-        if env in ("development", "test"):
-            seed_database(connection)
+        # Production should set ENV=production on Railway if you want
+        # to avoid the idempotency check.
+
+        # env = os.getenv("ENV", "development")
+        # if env in ("development", "test"):
+        seed_database(connection)
         connection.commit()
     except Exception:
         connection.rollback()

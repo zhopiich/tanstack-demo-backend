@@ -555,6 +555,52 @@ class SubmissionRepository:
             reviewed_at=datetime.fromisoformat(row["reviewed_at"]),
         )
 
+    def _tags_for_ids(self, ids: list[str]) -> dict[str, list[str]]:
+        result: dict[str, list[str]] = {sid: [] for sid in ids}
+        if not ids:
+            return result
+        placeholders = ",".join("?" * len(ids))
+        rows = self._connection.execute(
+            f"""
+            SELECT submission_id, tag
+            FROM submission_tags
+            WHERE submission_id IN ({placeholders})
+            ORDER BY submission_id, position
+            """,
+            ids,
+        ).fetchall()
+        for row in rows:
+            result[row["submission_id"]].append(row["tag"])
+        return result
+
+    def _review_for_ids(
+        self, ids: list[str]
+    ) -> dict[str, domain.Review | None]:
+        result: dict[str, domain.Review | None] = {sid: None for sid in ids}
+        if not ids:
+            return result
+        placeholders = ",".join("?" * len(ids))
+        rows = self._connection.execute(
+            f"""
+            SELECT submission_id, reviewer_name, reviewer_email,
+                   verdict, reason, reviewed_at
+            FROM reviews
+            WHERE submission_id IN ({placeholders})
+            """,
+            ids,
+        ).fetchall()
+        for row in rows:
+            result[row["submission_id"]] = domain.Review(
+                reviewer=domain.Reviewer(
+                    name=row["reviewer_name"],
+                    email=row["reviewer_email"],
+                ),
+                verdict=domain.ReviewVerdict(row["verdict"]),
+                reason=row["reason"],
+                reviewed_at=datetime.fromisoformat(row["reviewed_at"]),
+            )
+        return result
+
     def _get_content(
         self,
         *,

@@ -1,18 +1,3 @@
-PRAGMA foreign_keys = OFF;
-
-DROP TABLE IF EXISTS reviews;
-DROP TABLE IF EXISTS auth_sessions;
-DROP TABLE IF EXISTS auth_users;
-DROP TABLE IF EXISTS submission_links;
-DROP TABLE IF EXISTS submission_videos;
-DROP TABLE IF EXISTS submission_images;
-DROP TABLE IF EXISTS submission_articles;
-DROP TABLE IF EXISTS submission_tags;
-DROP TABLE IF EXISTS submissions;
-DROP TABLE IF EXISTS submitters;
-
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE submitters (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

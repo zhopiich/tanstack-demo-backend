@@ -82,9 +82,7 @@ class SubmissionRepository:
         results = self.find_submissions_by_ids([submission_id])
         return results[0] if results else None
 
-    def find_submissions_by_ids(
-        self, ids: list[str]
-    ) -> list[domain.Submission]:
+    def find_submissions_by_ids(self, ids: list[str]) -> list[domain.Submission]:
         unique_ids = list(dict.fromkeys(ids))
         if not unique_ids:
             return []
@@ -583,9 +581,7 @@ class SubmissionRepository:
             result[row["submission_id"]].append(row["tag"])
         return result
 
-    def _review_for_ids(
-        self, ids: list[str]
-    ) -> dict[str, domain.Review | None]:
+    def _review_for_ids(self, ids: list[str]) -> dict[str, domain.Review | None]:
         result: dict[str, domain.Review | None] = {sid: None for sid in ids}
         if not ids:
             return result
@@ -682,9 +678,7 @@ class SubmissionRepository:
             is_behind_paywall=bool(row["is_behind_paywall"]),
         )
 
-    def _content_for_ids(
-        self, rows: list[sqlite3.Row]
-    ) -> dict[str, domain.Content]:
+    def _content_for_ids(self, rows: list[sqlite3.Row]) -> dict[str, domain.Content]:
         result: dict[str, domain.Content] = {}
         if not rows:
             return result
@@ -777,9 +771,7 @@ class SubmissionRepository:
 
         return result
 
-    def _load_submission_list(
-        self, rows: list[sqlite3.Row]
-    ) -> list[domain.Submission]:
+    def _load_submission_list(self, rows: list[sqlite3.Row]) -> list[domain.Submission]:
         if not rows:
             return []
         ids = [row["id"] for row in rows]

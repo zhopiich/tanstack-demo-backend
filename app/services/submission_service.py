@@ -144,33 +144,31 @@ class SubmissionService:
         submissions = self._submissions_by_ids(body.ids)
         now = datetime.now(UTC)
 
-        for submission in submissions:
-            self._repository.update_submission(
-                replace(
-                    submission,
-                    status=domain.SubmissionStatus(body.verdict),
-                    review=domain.Review(
-                        reviewer=domain.Reviewer(
-                            name=reviewer.name,
-                            email=str(reviewer.email),
-                        ),
-                        verdict=domain.ReviewVerdict(body.verdict),
-                        reason=body.reason,
-                        reviewed_at=now,
+        updated = [
+            replace(
+                s,
+                status=domain.SubmissionStatus(body.verdict),
+                review=domain.Review(
+                    reviewer=domain.Reviewer(
+                        name=reviewer.name,
+                        email=str(reviewer.email),
                     ),
-                    updated_at=now,
-                )
+                    verdict=domain.ReviewVerdict(body.verdict),
+                    reason=body.reason,
+                    reviewed_at=now,
+                ),
+                updated_at=now,
             )
+            for s in submissions
+        ]
 
-        return UpdatedCountResponse(updatedCount=len(submissions))
+        self._repository.batch_review(updated)
+        return UpdatedCountResponse(updatedCount=len(updated))
 
     def batch_delete(self, body: BatchDeleteBody) -> DeletedCountResponse:
-        submissions = self._submissions_by_ids(body.ids)
-
-        for submission in submissions:
-            self._repository.delete_submission(submission.id)
-
-        return DeletedCountResponse(deletedCount=len(submissions))
+        self._submissions_by_ids(body.ids)
+        count = self._repository.batch_delete(body.ids)
+        return DeletedCountResponse(deletedCount=count)
 
     def _get_domain_submission(self, submission_id: str) -> domain.Submission:
         submission = self._repository.get_submission(submission_id)

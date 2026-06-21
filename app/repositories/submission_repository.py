@@ -165,6 +165,29 @@ class SubmissionRepository:
 
         return self.get_submission(submission.id)
 
+    def batch_review(self, submissions: list[domain.Submission]) -> int:
+        with self._connection:
+            for submission in submissions:
+                self._connection.execute(
+                    "UPDATE submissions SET status=?, updated_at=? WHERE id=?",
+                    (
+                        submission.status.value,
+                        submission.updated_at.isoformat(),
+                        submission.id,
+                    ),
+                )
+                self._replace_review(submission)
+        return len(submissions)
+
+    def batch_delete(self, ids: list[str]) -> int:
+        with self._connection:
+            placeholders = ",".join("?" * len(ids))
+            cursor = self._connection.execute(
+                f"DELETE FROM submissions WHERE id IN ({placeholders})",
+                ids,
+            )
+        return cursor.rowcount
+
     def delete_submission(self, submission_id: str) -> bool:
         with self._connection:
             cursor = self._connection.execute(

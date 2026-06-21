@@ -32,6 +32,7 @@ def repository(tmp_path) -> Iterator[SubmissionRepository]:
     try:
         run_migrations(connection)
         seed_database(connection)
+        connection.commit()
         yield SubmissionRepository(connection)
     finally:
         connection.close()
@@ -322,6 +323,54 @@ def test_delete_submission_returns_false_for_missing_submission(
     deleted = repository.delete_submission("c999999999999999999999999")
 
     assert deleted is False
+
+
+def test_batch_review_rollback_on_mid_batch_failure(
+    repository: SubmissionRepository,
+) -> None:
+    submissions = repository.list_submissions()[:3]
+    ids = [s.id for s in submissions]
+    original_statuses = {s.id: s.status for s in submissions}
+    original_reviews = {s.id: s.review for s in submissions}
+
+    now = datetime.now(UTC)
+    updated = [
+        replace(
+            s,
+            status=SubmissionStatus.REJECTED,
+            review=Review(
+                reviewer=Reviewer(name="Test", email="test@test.com"),
+                verdict=ReviewVerdict.REJECTED,
+                reason="Test reason for rollback verification",
+                reviewed_at=now,
+            ),
+            updated_at=now,
+        )
+        for s in submissions
+    ]
+
+    call_count = 0
+    original_replace_review = repository._replace_review
+
+    def failing_replace_review(submission: object) -> None:
+        nonlocal call_count
+        call_count += 1
+        if call_count > 1:
+            raise RuntimeError("Simulated batch failure")
+        return original_replace_review(submission)
+
+    repository._replace_review = failing_replace_review
+
+    with pytest.raises(RuntimeError, match="Simulated batch failure"):
+        repository.batch_review(updated)
+
+    repository._replace_review = original_replace_review
+
+    for sid in ids:
+        fetched = repository.get_submission(sid)
+        assert fetched is not None, f"get_submission({sid}) returned None"
+        assert fetched.status == original_statuses[sid]
+        assert fetched.review == original_reviews[sid]
 
 
 def _new_link_submission(submission_id: str) -> Submission:

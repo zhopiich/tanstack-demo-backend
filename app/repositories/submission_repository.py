@@ -179,6 +179,15 @@ class SubmissionRepository:
                 self._replace_review(submission)
         return len(submissions)
 
+    def batch_delete(self, ids: list[str]) -> int:
+        with self._connection:
+            placeholders = ",".join("?" * len(ids))
+            cursor = self._connection.execute(
+                f"DELETE FROM submissions WHERE id IN ({placeholders})",
+                ids,
+            )
+        return cursor.rowcount
+
     def delete_submission(self, submission_id: str) -> bool:
         with self._connection:
             cursor = self._connection.execute(
